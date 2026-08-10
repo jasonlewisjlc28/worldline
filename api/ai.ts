@@ -118,7 +118,7 @@ export type PersonPayload = {
   lng: number;
   summary: string;
   suggestions: { name: string; reason: string }[];
-  companies: { name: string; summary: string; role: string; timeline: string }[];
+  companies: { name: string; summary: string; role: string; timeline: string; ownership?: "state" | "partial" | "private" }[];
   parties: { name: string; summary: string; role: string; timeline: string }[];
 };
 
@@ -132,7 +132,7 @@ Rules:
 - lat/lng: coordinates of the city where the person primarily resides or works — NOT just the country capital if they are known to live/work elsewhere (e.g. a Saint Petersburg-based figure gets Saint Petersburg, a figure based in Sochi gets Sochi). Only use the capital when it genuinely is their primary base. Precision to ~0.1 degree is fine.
 - summary: 80-140 words, neutral, factual.
 - suggestions: up to 6 real, living-or-recent people with the strongest documented political, financial or ideological relationships to this person. reason: one sentence explaining why they matter (close association, financial influence, political sway). Never list more than 6.
-- companies: organizations/companies the person invested in, worked for, founded, or is documented to be indebted to/influenced by. Each with summary (1-2 sentences), role, timeline (e.g. "1998–2004").
+- companies: organizations/companies the person invested in, worked for, founded, or is documented to be indebted to/influenced by. Each with summary (1-2 sentences), role, timeline (e.g. "1998–2004"), and ownership: exactly one of "state" (state-owned enterprise), "partial" (state holds a significant stake but not full control), or "private". Government bodies and public offices are NOT companies — for those, omit ownership.
 - parties: political parties the person has belonged to, with summary (1-2 sentences), role, timeline.
 - All fields are required; use [] for empty lists.
 - NEVER leave title, country, lat or lng empty — always provide your best determination (title = their most notable current/recent role; country = their country of citizenship or primary political activity, as a common short name like "Russia", "United States", "United Kingdom").`;
@@ -198,12 +198,16 @@ function normalizePerson(p: PersonPayload): PersonPayload {
       .slice(0, 6)
       .map((s) => ({ name: String(s.name ?? ""), reason: String(s.reason ?? "") }))
       .filter((s) => s.name),
-    companies: (Array.isArray(p.companies) ? p.companies : []).map((c) => ({
-      name: String(c.name ?? ""),
-      summary: String(c.summary ?? ""),
-      role: String(c.role ?? ""),
-      timeline: String(c.timeline ?? ""),
-    })),
+    companies: (Array.isArray(p.companies) ? p.companies : []).map((c) => {
+      const o = String(c.ownership ?? "").toLowerCase();
+      return {
+        name: String(c.name ?? ""),
+        summary: String(c.summary ?? ""),
+        role: String(c.role ?? ""),
+        timeline: String(c.timeline ?? ""),
+        ownership: o === "state" || o === "partial" || o === "private" ? (o as "state" | "partial" | "private") : undefined,
+      };
+    }),
     parties: (Array.isArray(p.parties) ? p.parties : []).map((c) => ({
       name: String(c.name ?? ""),
       summary: String(c.summary ?? ""),

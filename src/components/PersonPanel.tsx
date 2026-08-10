@@ -220,7 +220,13 @@ function EntityList({
   items,
   empty,
 }: {
-  items: { name: string; summary: string; role: string; timeline: string }[];
+  items: {
+    name: string;
+    summary: string;
+    role: string;
+    timeline: string;
+    ownership?: "state" | "partial" | "private";
+  }[];
   empty: string;
 }) {
   if (items.length === 0) {
@@ -241,6 +247,25 @@ function EntityList({
               </span>
             )}
           </div>
+          {item.ownership && (
+            <div className="mt-1.5">
+              <span
+                className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                  item.ownership === "state"
+                    ? "border-red-400/40 bg-red-400/10 text-red-300"
+                    : item.ownership === "partial"
+                      ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
+                      : "border-emerald-400/40 bg-emerald-400/10 text-emerald-300"
+                }`}
+              >
+                {item.ownership === "state"
+                  ? "State-owned"
+                  : item.ownership === "partial"
+                    ? "Partial SOE"
+                    : "Private"}
+              </span>
+            </div>
+          )}
           {item.role && (
             <p className="mt-0.5 text-xs font-medium text-amber-200/80">{item.role}</p>
           )}

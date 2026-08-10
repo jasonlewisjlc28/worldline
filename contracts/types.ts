@@ -13,6 +13,7 @@ export type CompanyDto = {
   summary: string;
   role: string;
   timeline: string;
+  ownership?: "state" | "partial" | "private";
 };
 
 export type PartyDto = {

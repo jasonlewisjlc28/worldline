@@ -8,7 +8,34 @@ export type CountryPanelProps = {
   onSelectPerson: (id: number) => void;
 };
 
-type EntityItem = { name: string; summary: string };
+type EntityItem = {
+  name: string;
+  summary: string;
+  ownership?: "state" | "partial" | "private";
+};
+
+const OWNERSHIP_LABELS: Record<string, string> = {
+  state: "State-owned",
+  partial: "Partial SOE",
+  private: "Private",
+};
+
+function OwnershipTag({ ownership }: { ownership?: EntityItem["ownership"] }) {
+  if (!ownership) return null;
+  const styles =
+    ownership === "state"
+      ? "border-red-400/40 bg-red-400/10 text-red-300"
+      : ownership === "partial"
+        ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
+        : "border-emerald-400/40 bg-emerald-400/10 text-emerald-300";
+  return (
+    <span
+      className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles}`}
+    >
+      {OWNERSHIP_LABELS[ownership]}
+    </span>
+  );
+}
 
 const GOV_KEYWORDS = [
   "government",
@@ -93,10 +120,14 @@ function collectEntities(
   for (const p of persons) {
     for (const e of p[key] ?? []) {
       if (!e?.name) continue;
-      const item = { name: e.name, summary: e.summary ?? "" };
+      const ownership =
+        key === "companies" && "ownership" in e ? e.ownership : undefined;
+      const item: EntityItem = { name: e.name, summary: e.summary ?? "", ownership };
       if (key === "companies" && isGovernmentEntity(item)) continue;
       const k = e.name.trim().toLowerCase();
       if (!map.has(k)) map.set(k, item);
+      else if (!map.get(k)!.ownership && ownership)
+        map.get(k)!.ownership = ownership;
     }
   }
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -140,6 +171,11 @@ function EntityList({ items }: { items: EntityItem[] }) {
           className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
         >
           <p className="text-sm font-semibold text-slate-100">{e.name}</p>
+          {e.ownership && (
+            <div className="mt-1.5">
+              <OwnershipTag ownership={e.ownership} />
+            </div>
+          )}
           {e.summary && (
             <p className="mt-1 text-xs leading-relaxed text-slate-400">
               {e.summary}
