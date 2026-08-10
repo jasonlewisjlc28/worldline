@@ -36,8 +36,10 @@ type ChatMessage = { role: "system" | "user"; content: string };
 
 async function chat(messages: ChatMessage[], temperature = 0.3): Promise<string> {
   const key = apiKey();
-  // Some models (e.g. kimi-k3) reject any temperature other than 1 — retry gracefully.
-  const attempt = (temp: number) =>
+  // - kimi-k3 rejects any temperature other than 1 → retry with 1.
+  // - Disabling "thinking" roughly halves latency on reasoning models → try it,
+  //   and fall back silently if the API/model doesn't accept the parameter.
+  const attempt = (temp: number, noThinking: boolean) =>
     fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -49,21 +51,37 @@ async function chat(messages: ChatMessage[], temperature = 0.3): Promise<string>
         messages,
         temperature: temp,
         response_format: { type: "json_object" },
+        ...(noThinking ? { thinking: { type: "disabled" } } : {}),
       }),
+      signal: AbortSignal.timeout(115_000),
     });
   let res: Response;
   try {
-    res = await attempt(temperature);
+    res = await attempt(temperature, true);
     if (res.status === 400) {
-      const body = await res.clone().text().catch(() => "");
-      if (body.includes("temperature")) res = await attempt(1);
+      let body = await res.clone().text().catch(() => "");
+      if (body.includes("thinking")) {
+        res = await attempt(temperature, false);
+        if (res.status === 400) body = await res.clone().text().catch(() => "");
+      }
+      // Models may pin temperature to a specific value (e.g. "only 0.6 is allowed").
+      if (res.status === 400 && body.includes("temperature")) {
+        const m = body.match(/only ([\d.]+) is allowed/);
+        res = await attempt(m ? parseFloat(m[1]) : 1, body.includes("thinking") === false);
+      }
     }
   } catch (e) {
     throw new AIRequestError(`Network error contacting AI: ${String(e)}`);
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new AIRequestError(`AI request failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new AIRequestError(
+      `AI request failed (${res.status}): ${text.replace(/<[^>]*>/g, " ").slice(0, 200)}`
+    );
+  }
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("json")) {
+    throw new AIRequestError("AI service returned an unexpected non-JSON response.");
   }
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];

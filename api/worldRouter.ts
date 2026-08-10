@@ -100,37 +100,47 @@ async function insertPerson(
   return toPersonDto(created);
 }
 
-/** Create AI-described connections between a new person and every existing person in the world. */
-async function linkToExisting(worldId: number, newcomer: PersonDto): Promise<ConnectionDto[]> {
+/**
+ * Create AI-described connections between a new person and every existing person.
+ * Runs IN THE BACKGROUND — the HTTP request returns immediately after the person
+ * is inserted, and the frontend polls world.detail for new connections. This keeps
+ * requests short enough to avoid platform gateway timeouts (HTML error pages).
+ */
+function linkToExistingInBackground(worldId: number, newcomer: PersonDto): void {
+  const db = getDb();
+  void (async () => {
+    const others = await db.query.persons.findMany({
+      where: eq(persons.worldId, worldId),
+    });
+    for (const other of others) {
+      if (other.id === newcomer.id) continue;
+      try {
+        const rel = await describeConnection(
+          { name: newcomer.name, title: newcomer.title },
+          { name: other.name, title: other.title }
+        );
+        await db.insert(connections).values({
+          worldId,
+          personAId: Math.min(newcomer.id, other.id),
+          personBId: Math.max(newcomer.id, other.id),
+          summary: rel.summary,
+          tags: rel.tags,
+        });
+      } catch (e) {
+        // A single failed link shouldn't block the rest; AIUnavailable surfaces on next action.
+        console.error(`[link] ${newcomer.name} ↔ ${other.name} failed:`, e);
+      }
+    }
+  })().catch((e) => console.error("[link] background linking crashed:", e));
+}
+
+/** How many people the newcomer still needs links to (for frontend polling). */
+async function pendingLinkCount(worldId: number, newcomerId: number): Promise<number> {
   const db = getDb();
   const others = await db.query.persons.findMany({
     where: eq(persons.worldId, worldId),
   });
-  const out: ConnectionDto[] = [];
-  for (const other of others) {
-    if (other.id === newcomer.id) continue;
-    try {
-      const rel = await describeConnection(
-        { name: newcomer.name, title: newcomer.title },
-        { name: other.name, title: other.title }
-      );
-      const [result] = await db.insert(connections).values({
-        worldId,
-        personAId: Math.min(newcomer.id, other.id),
-        personBId: Math.max(newcomer.id, other.id),
-        summary: rel.summary,
-        tags: rel.tags,
-      });
-      const created = await db.query.connections.findFirst({
-        where: eq(connections.id, Number(result.insertId)),
-      });
-      if (created) out.push(toConnectionDto(created));
-    } catch (e) {
-      // A single failed link shouldn't block the add; surface other errors normally.
-      if (e instanceof AIUnavailableError) throw e;
-    }
-  }
-  return out;
+  return others.filter((p) => p.id !== newcomerId).length;
 }
 
 async function markSuggestionAdded(personId: number, suggestedName: string) {
@@ -170,13 +180,9 @@ async function runAddFlow(worldId: number, query: string): Promise<SearchResultD
   if (dupe) return { type: "duplicate", person: toPersonDto(dupe) };
 
   const person = await insertPerson(worldId, payload);
-  let newConnections: ConnectionDto[] = [];
-  try {
-    newConnections = await linkToExisting(worldId, person);
-  } catch (e) {
-    aiErrorToTrpc(e);
-  }
-  return { type: "added", person, newConnections };
+  const pendingLinks = await pendingLinkCount(worldId, person.id);
+  linkToExistingInBackground(worldId, person);
+  return { type: "added", person, newConnections: [], pendingLinks };
 }
 
 export const worldRouter = createRouter({

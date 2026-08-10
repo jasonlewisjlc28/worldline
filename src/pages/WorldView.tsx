@@ -26,7 +26,40 @@ export default function WorldView() {
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [typo, setTypo] = useState<TypoState>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingLinks, setPendingLinks] = useState(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // While connection summaries are being generated in the background, poll for them.
+  useEffect(() => {
+    if (pendingLinks <= 0) {
+      if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+      return;
+    }
+    if (!pollTimer.current) {
+      pollTimer.current = setInterval(() => {
+        utils.world.detail.invalidate({ worldId: id });
+      }, 4000);
+    }
+    return () => {
+      if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+    };
+  }, [pendingLinks, id, utils]);
+
+  // Stop polling once all expected connections have arrived.
+  const connectionCount = detailQuery.data?.connections.length ?? 0;
+  const personCount = detailQuery.data?.persons.length ?? 0;
+  useEffect(() => {
+    if (pendingLinks > 0 && connectionCount >= (personCount * (personCount - 1)) / 2) {
+      setPendingLinks(0);
+    }
+  }, [connectionCount, personCount, pendingLinks]);
 
   const showNotice = (msg: string, ms = 5000) => {
     setNotice(msg);
@@ -54,8 +87,15 @@ export default function WorldView() {
     }
     // added
     setSelectedId(result.person.id);
-    showNotice(`Added ${result.person.name} — ${result.newConnections.length} connection(s) mapped.`);
+    const pending = result.pendingLinks ?? 0;
+    if (pending > 0) {
+      setPendingLinks(pending);
+      showNotice(`Added ${result.person.name} — mapping ${pending} connection(s) in the background…`);
+    } else {
+      showNotice(`Added ${result.person.name}.`);
+    }
     utils.world.detail.invalidate({ worldId: id });
+    utils.world.list.invalidate();
   };
 
   const onMutationError = (e: { message?: string }) => {
@@ -196,9 +236,9 @@ export default function WorldView() {
       />
 
       {/* busy overlay */}
-      {busy && (
+      {(busy || pendingLinks > 0) && (
         <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1.5 text-xs text-sky-300 backdrop-blur">
-          KIMI AI is researching connections…
+          {busy ? "KIMI AI is researching…" : "KIMI AI is mapping connections in the background…"}
         </div>
       )}
     </div>

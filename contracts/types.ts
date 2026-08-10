@@ -69,4 +69,6 @@ export type SearchResultDto =
       type: "added";
       person: PersonDto;
       newConnections: ConnectionDto[];
+      /** Number of connection summaries being generated in the background. */
+      pendingLinks?: number;
     };
