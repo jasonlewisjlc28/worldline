@@ -27,7 +27,7 @@ function OwnershipTag({ ownership }: { ownership?: EntityItem["ownership"] }) {
       ? "border-red-400/40 bg-red-400/10 text-red-300"
       : ownership === "partial"
         ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
-        : "border-emerald-400/40 bg-emerald-400/10 text-emerald-300";
+        : "border-emerald-300/60 bg-emerald-300/15 text-emerald-200";
   return (
     <span
       className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles}`}
