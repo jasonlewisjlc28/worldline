@@ -26,25 +26,25 @@ export default function DidYouMeanDialog({
 }: DidYouMeanDialogProps) {
   return (
     <AlertDialog open={open}>
-      <AlertDialogContent className="border-slate-700 bg-[#0c1526] text-slate-100">
+      <AlertDialogContent className="border-[#e3c4c4] bg-white text-stone-900">
         <AlertDialogHeader>
           <AlertDialogTitle>Did you mean {suggestion}?</AlertDialogTitle>
-          <AlertDialogDescription className="text-slate-400">
+          <AlertDialogDescription className="text-stone-500">
             “{original}” looks like a possible misspelling. Add{" "}
-            <span className="font-semibold text-slate-200">{suggestion}</span> to the map
+            <span className="font-semibold text-stone-800">{suggestion}</span> to the map
             instead?
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel
             onClick={onCancel}
-            className="border-slate-600 bg-transparent text-slate-300 hover:bg-slate-700/50 hover:text-slate-100"
+            className="border-[#d9b3b3] bg-transparent text-stone-700 hover:bg-[#f3dede] hover:text-stone-900"
           >
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-sky-500 text-white hover:bg-sky-400"
+            className="bg-[#b91c1c] text-white hover:bg-[#991b1b]"
           >
             Yes, add {suggestion}
           </AlertDialogAction>

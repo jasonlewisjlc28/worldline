@@ -187,7 +187,7 @@ export default function WorldMap({
   };
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#070d1a]"><div className="relative h-full w-full">
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#f6e2e2]"><div className="relative h-full w-full">
       <svg
         ref={svgRef}
         width={size.w}
@@ -205,7 +205,7 @@ export default function WorldMap({
           {/* ocean sphere */}
           <path
             d={pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? ""}
-            fill="#0a1428"
+            fill="#eccccc"
           />
           {/* countries — hover highlights light blue, click opens the country panel */}
           {countries.map((c, i) => {
@@ -216,8 +216,8 @@ export default function WorldMap({
               <path
                 key={c.id ?? i}
                 d={pathGen(c as never) ?? ""}
-                fill={selected ? "#1d4d7a" : hovered ? "#2b5d8f" : "#132039"}
-                stroke={hovered || selected ? "#7dd3fc" : "#1e3050"}
+                fill={selected ? "#e8bfbf" : hovered ? "#ecc6c6" : "#f2dada"}
+                stroke={hovered || selected ? "#b91c1c" : "#e6c8c8"}
                 strokeWidth={hovered || selected ? 1 : 0.5}
                 className="cursor-pointer"
                 style={{ transition: "fill 150ms, stroke 150ms" }}
@@ -241,9 +241,9 @@ export default function WorldMap({
                 key={l.id}
                 d={l.d}
                 fill="none"
-                stroke={hot ? "#38bdf8" : "#8b6fe8"}
-                strokeOpacity={hot ? 0.95 : 0.7}
-                strokeWidth={hot ? 2.4 : 1.8}
+                stroke={hot ? "#b91c1c" : "#7f1d1d"}
+                strokeOpacity={hot ? 0.95 : 0.45}
+                strokeWidth={hot ? 2.2 : 1.1}
                 style={{ transition: "stroke 200ms, stroke-opacity 200ms" }}
               />
             );
@@ -256,7 +256,7 @@ export default function WorldMap({
             if (!pt) return null;
             const selected = p.id === selectedId;
             const highlighted = highlightIds?.has(p.id) ?? false;
-            const r = selected ? 9 : highlighted ? 7 : 5.5;
+            const r = selected ? 8 : highlighted ? 6.5 : 5;
             return (
               <g
                 key={p.id}
@@ -267,31 +267,32 @@ export default function WorldMap({
                   onSelect(p.id);
                 }}
               >
-                {(selected || highlighted) && (
-                  <circle
-                    r={r + 7}
-                    fill="none"
-                    stroke={selected ? "#38bdf8" : "#a78bfa"}
-                    strokeOpacity={0.5}
-                    strokeWidth={1.5}
-                  />
-                )}
-                <circle
-                  r={r}
-                  fill={selected ? "#38bdf8" : "#e2b341"}
-                  stroke="#0b1220"
-                  strokeWidth={1.5}
-                  style={{ transition: "r 150ms" }}
+                {/* corner brackets — ACP-style targeting marks */}
+                <path
+                  d={`M${-r - 6},${-r - 2} V${-r - 6} H${-r - 2} M${r + 2},${-r - 6} H${r + 6} V${-r - 2} M${r + 6},${r + 2} V${r + 6} H${r + 2} M${-r - 2},${r + 6} H${-r - 6} V${r + 2}`}
+                  fill="none"
+                  stroke={selected ? "#b91c1c" : "#1c1917"}
+                  strokeWidth={1.4}
+                  strokeOpacity={selected || highlighted ? 1 : 0.75}
+                />
+                {/* square marker */}
+                <rect
+                  x={-r}
+                  y={-r}
+                  width={r * 2}
+                  height={r * 2}
+                  fill={selected ? "#b91c1c" : highlighted ? "#7f1d1d" : "#1c1917"}
+                  style={{ transition: "all 150ms" }}
                 />
                 <text
-                  y={-r - 6}
+                  y={-r - 12}
                   textAnchor="middle"
-                  fill={selected ? "#bae6fd" : "#d7dee9"}
+                  fill={selected ? "#b91c1c" : "#292524"}
                   fontSize={selected ? 13 : 11}
-                  fontWeight={selected ? 700 : 500}
+                  fontWeight={selected ? 800 : 600}
                   style={{
                     paintOrder: "stroke",
-                    stroke: "#070d1a",
+                    stroke: "#f6e2e2",
                     strokeWidth: 3,
                     pointerEvents: "none",
                     userSelect: "none",
@@ -307,7 +308,7 @@ export default function WorldMap({
       {/* floating country name label follows the cursor */}
       {hoveredCountry && cursor && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-sky-400/40 bg-[#0c1526]/95 px-2.5 py-1 text-xs font-semibold text-sky-200 shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-md border border-[#d9a3a3] bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#7f1d1d] shadow-lg"
           style={{ left: cursor.x + 14, top: cursor.y + 10 }}
         >
           {hoveredCountry}
@@ -315,7 +316,7 @@ export default function WorldMap({
       )}
       </div>
       {persons.length === 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-500">
+        <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-[#a87878]">
           <p className="text-lg font-medium">This world is empty</p>
           <p className="mt-1 text-sm">
             Use the search bar below to add your first figure

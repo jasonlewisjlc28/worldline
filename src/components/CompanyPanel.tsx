@@ -23,9 +23,9 @@ function OwnershipTag({ ownership }: { ownership?: CompanyDto["ownership"] }) {
   if (!ownership) return null;
   const styles =
     ownership === "state"
-      ? "border-red-300/60 bg-red-400/15 text-white"
+      ? "border-red-300/60 bg-red-500/15 text-white"
       : ownership === "partial"
-        ? "border-amber-300/60 bg-amber-400/15 text-white"
+        ? "border-amber-300/60 bg-amber-500/15 text-white"
         : "border-emerald-300/60 bg-emerald-300/15 text-white";
   return (
     <span
@@ -60,36 +60,36 @@ function PersonEntry({
   });
 
   return (
-    <li className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3">
+    <li className="rounded-lg border border-[#e3c4c4] bg-[#f9ecec] p-3">
       <button
         onClick={() => onSelectPerson(person.id)}
-        className="text-left transition hover:text-sky-300"
+        className="text-left transition hover:text-[#b91c1c]"
       >
-        <p className="text-sm font-semibold text-slate-100">{person.name}</p>
+        <p className="text-sm font-semibold text-stone-900">{person.name}</p>
         {person.title && (
-          <p className="mt-0.5 text-xs text-amber-200/80">{person.title}</p>
+          <p className="mt-0.5 text-xs text-[#92400e]/90">{person.title}</p>
         )}
       </button>
 
       {(entry.role || entry.timeline) && (
-        <p className="mt-1.5 text-xs font-medium text-sky-300/90">
+        <p className="mt-1.5 text-xs font-medium text-[#b91c1c]/90">
           {entry.role}
           {entry.role && entry.timeline ? " · " : ""}
           {entry.timeline}
         </p>
       )}
       {entry.summary && (
-        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+        <p className="mt-1 text-xs leading-relaxed text-stone-500">
           {entry.summary}
         </p>
       )}
 
       {analysis ? (
-        <div className="mt-2 rounded-md border border-sky-400/25 bg-sky-400/5 p-2.5">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-sky-300">
+        <div className="mt-2 rounded-md border border-[#b91c1c]/25 bg-[#b91c1c]/5 p-2.5">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#b91c1c]">
             <Sparkles size={10} /> KIMI Analysis
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-300">
+          <p className="mt-1 text-xs leading-relaxed text-stone-700">
             {analysis}
           </p>
         </div>
@@ -103,7 +103,7 @@ function PersonEntry({
               companyName,
             })
           }
-          className="mt-2 flex items-center gap-1.5 rounded-md border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-300 transition hover:bg-sky-400/20 disabled:opacity-50"
+          className="mt-2 flex items-center gap-1.5 rounded-md border border-[#b91c1c]/30 bg-[#b91c1c]/10 px-2.5 py-1 text-[11px] font-medium text-[#b91c1c] transition hover:bg-[#b91c1c]/15 disabled:opacity-50"
         >
           {analyzeMutation.isPending ? (
             <Loader2 size={11} className="animate-spin" />
@@ -114,7 +114,7 @@ function PersonEntry({
         </button>
       )}
       {analyzeMutation.isError && (
-        <p className="mt-1 text-[11px] text-red-300">
+        <p className="mt-1 text-[11px] text-red-700">
           Analysis failed — try again.
         </p>
       )}
@@ -148,13 +148,13 @@ export default function CompanyPanel({
   // panel in the stacking order — that was making it open UNDER the country
   // panel (invisible until the country panel was closed).
   return createPortal(
-    <aside className="pointer-events-auto fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526] shadow-2xl">
+    <aside className="pointer-events-auto fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[#e3c4c4] bg-white shadow-2xl">
       {/* header */}
-      <div className="border-b border-slate-700/60 p-5">
+      <div className="border-b border-[#e3c4c4] p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-bold text-slate-100">
-              <Building2 size={18} className="text-sky-400" />
+            <h2 className="flex items-center gap-2 text-xl font-bold text-stone-900">
+              <Building2 size={18} className="text-[#b91c1c]" />
               {companyName}
             </h2>
             {ownership && (
@@ -163,7 +163,7 @@ export default function CompanyPanel({
               </div>
             )}
             {headerSummary && (
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              <p className="mt-2 text-xs leading-relaxed text-stone-500">
                 {headerSummary}
               </p>
             )}
@@ -171,14 +171,14 @@ export default function CompanyPanel({
           <div className="flex shrink-0 items-center gap-1">
             <button
               onClick={onBack}
-              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
+              className="rounded-md p-1.5 text-stone-500 transition hover:bg-[#f3dede] hover:text-stone-900"
               aria-label="Back to previous panel"
             >
               <ArrowLeft size={18} />
             </button>
             <button
               onClick={onClose}
-              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
+              className="rounded-md p-1.5 text-stone-500 transition hover:bg-[#f3dede] hover:text-stone-900"
               aria-label="Close panel"
             >
               <X size={18} />
@@ -189,19 +189,19 @@ export default function CompanyPanel({
 
       {/* people */}
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
-        <div className="flex items-center gap-2 border-b border-slate-700/60 pb-2">
-          <span className="text-sky-400">
+        <div className="flex items-center gap-2 border-b border-[#e3c4c4] pb-2">
+          <span className="text-[#b91c1c]">
             <Users size={14} />
           </span>
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-300">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-stone-700">
             Affiliated People
           </h3>
-          <span className="ml-auto rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+          <span className="ml-auto rounded-full bg-[#f3dede] px-2 py-0.5 text-[10px] font-semibold text-stone-700">
             {affiliations.length}
           </span>
         </div>
         {affiliations.length === 0 ? (
-          <p className="text-xs italic text-slate-500">
+          <p className="text-xs italic text-stone-400">
             No one on this map has a documented affiliation with {companyName}{" "}
             yet.
           </p>

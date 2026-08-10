@@ -157,18 +157,18 @@ export default function WorldView() {
 
   if (detailQuery.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#070d1a]">
-        <Loader2 className="animate-spin text-sky-400" size={32} />
+      <div className="flex min-h-screen items-center justify-center bg-[#f6e2e2]">
+        <Loader2 className="animate-spin text-[#b91c1c]" size={32} />
       </div>
     );
   }
   if (detailQuery.error || !detailQuery.data) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#070d1a] text-slate-300">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f6e2e2] text-stone-700">
         <p>World not found.</p>
         <button
           onClick={() => navigate("/")}
-          className="rounded-md bg-sky-500 px-4 py-2 text-sm text-white"
+          className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm text-white"
         >
           Back to menu
         </button>
@@ -177,7 +177,7 @@ export default function WorldView() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#070d1a]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#f6e2e2]">
       <WorldMap
         persons={persons}
         connections={connections}
@@ -203,25 +203,25 @@ export default function WorldView() {
         <div className="pointer-events-auto flex flex-col items-start gap-2">
           <button
             onClick={() => navigate("/")}
-            className="flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-3 py-2 text-xs font-medium text-slate-300 backdrop-blur transition hover:border-sky-400/60 hover:text-sky-300"
+            className="flex items-center gap-2 rounded-md border border-[#e3c4c4] bg-white/92 px-3 py-2 text-xs font-medium text-stone-700 backdrop-blur transition hover:border-[#b91c1c]/60 hover:text-[#b91c1c]"
           >
             <Home size={14} /> Menu
           </button>
           {persons.length >= 2 && (
             <button
               onClick={() => setConnectOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-3 py-2 text-xs font-medium text-slate-300 backdrop-blur transition hover:border-sky-400/60 hover:text-sky-300"
+              className="flex items-center gap-2 rounded-md border border-[#e3c4c4] bg-white/92 px-3 py-2 text-xs font-medium text-stone-700 backdrop-blur transition hover:border-[#b91c1c]/60 hover:text-[#b91c1c]"
             >
               <Link2 size={14} /> Create connection
             </button>
           )}
         </div>
-        <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-4 py-2 backdrop-blur">
-          <Globe2 size={14} className="text-sky-400" />
-          <span className="text-sm font-semibold text-slate-200">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-[#e3c4c4] bg-white/92 px-4 py-2 backdrop-blur">
+          <Globe2 size={14} className="text-[#b91c1c]" />
+          <span className="text-sm font-semibold text-stone-800">
             {detailQuery.data.world.name}
           </span>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-stone-400">
             {persons.length} figure{persons.length === 1 ? "" : "s"} · {connections.length} tie
             {connections.length === 1 ? "" : "s"}
           </span>
@@ -329,7 +329,7 @@ export default function WorldView() {
 
       {/* busy overlay */}
       {(busy || pendingLinks > 0) && (
-        <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1.5 text-xs text-sky-300 backdrop-blur">
+        <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full border border-[#b91c1c]/30 bg-[#b91c1c]/10 px-4 py-1.5 text-xs text-[#b91c1c] backdrop-blur">
           {busy ? "KIMI AI is researching…" : "KIMI AI is mapping connections in the background…"}
         </div>
       )}

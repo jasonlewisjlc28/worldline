@@ -27,21 +27,21 @@ export default function StartMenu() {
   const continueWorld = lastWorldQuery.data?.[0];
 
   const menuButton =
-    "group flex w-72 items-center justify-between rounded-lg border border-slate-700/70 bg-slate-800/40 px-5 py-3.5 text-left text-slate-200 transition hover:border-sky-400/60 hover:bg-sky-400/10 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-40";
+    "group flex w-72 items-center justify-between rounded-lg border border-[#e3c4c4] bg-[#f9ecec] px-5 py-3.5 text-left text-stone-800 transition hover:border-[#b91c1c]/60 hover:bg-[#b91c1c]/10 hover:text-[#991b1b] disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#070d1a] px-4">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#f6e2e2] px-4">
       {/* backdrop decoration */}
       <div className="pointer-events-none absolute inset-0 opacity-30">
         <div className="absolute left-1/2 top-1/2 h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.15),transparent_60%)]" />
       </div>
 
       <div className="relative z-10 flex flex-col items-center">
-        <Globe2 size={44} className="mb-4 text-sky-400" />
-        <h1 className="text-4xl font-black tracking-tight text-slate-100">
-          WORLD<span className="text-sky-400">LINE</span>
+        <Globe2 size={44} className="mb-4 text-[#b91c1c]" />
+        <h1 className="text-4xl font-black tracking-tight text-stone-900">
+          WORLD<span className="text-[#b91c1c]">LINE</span>
         </h1>
-        <p className="mt-2 max-w-md text-center text-sm text-slate-400">
+        <p className="mt-2 max-w-md text-center text-sm text-stone-500">
           A living map of power — people, parties, companies, and the ties that bind them.
         </p>
 
@@ -62,7 +62,7 @@ export default function StartMenu() {
                 <span className="flex items-center gap-3">
                   <Play size={18} /> Continue
                   {continueWorld && (
-                    <span className="text-xs text-slate-500">({continueWorld.name})</span>
+                    <span className="text-xs text-stone-400">({continueWorld.name})</span>
                   )}
                 </span>
                 <ChevronRight size={16} className="opacity-40 group-hover:opacity-100" />
@@ -88,7 +88,7 @@ export default function StartMenu() {
                   }
                 }}
                 placeholder="Name your world…"
-                className="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-sky-400"
+                className="rounded-lg border border-[#e3c4c4] bg-[#fdf3f3] px-4 py-3 text-sm text-stone-900 placeholder-stone-400 outline-none focus:border-[#b91c1c]"
               />
               <button
                 className={menuButton}
@@ -112,11 +112,11 @@ export default function StartMenu() {
             <div className="flex w-72 flex-col gap-2">
               {worldsQuery.isLoading && (
                 <div className="flex justify-center py-4">
-                  <Loader2 className="animate-spin text-slate-400" />
+                  <Loader2 className="animate-spin text-stone-500" />
                 </div>
               )}
               {worldsQuery.data?.length === 0 && (
-                <p className="py-4 text-center text-sm text-slate-500">
+                <p className="py-4 text-center text-sm text-stone-400">
                   No saved worlds yet.
                 </p>
               )}
@@ -128,7 +128,7 @@ export default function StartMenu() {
                   >
                     <span className="flex flex-col">
                       <span className="font-medium">{w.name}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-stone-400">
                         Last opened {new Date(w.updatedAt).toLocaleDateString()}
                       </span>
                     </span>
@@ -140,7 +140,7 @@ export default function StartMenu() {
                           e.stopPropagation();
                           setConfirmDeleteId(w.id);
                         }}
-                        className="rounded-md p-1.5 text-slate-500 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
+                        className="rounded-md p-1.5 text-stone-400 opacity-0 transition hover:bg-red-500/15 hover:text-red-700 group-hover:opacity-100"
                       >
                         <Trash2 size={15} />
                       </span>
@@ -149,7 +149,7 @@ export default function StartMenu() {
                   </button>
                   {confirmDeleteId === w.id && (
                     <div className="mt-1 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-                      <p className="text-xs text-slate-300">
+                      <p className="text-xs text-stone-700">
                         Delete <span className="font-semibold">{w.name}</span> and
                         everyone on it? This cannot be undone.
                       </p>
@@ -157,13 +157,13 @@ export default function StartMenu() {
                         <button
                           onClick={() => deleteMutation.mutate({ worldId: w.id })}
                           disabled={deleteMutation.isPending}
-                          className="flex-1 rounded-md bg-red-500/80 px-2 py-1.5 text-xs font-medium text-white transition hover:bg-red-400 disabled:opacity-40"
+                          className="flex-1 rounded-md bg-red-500/80 px-2 py-1.5 text-xs font-medium text-white transition hover:bg-red-500 disabled:opacity-40"
                         >
                           {deleteMutation.isPending ? "Deleting…" : "Delete"}
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(null)}
-                          className="flex-1 rounded-md border border-slate-600 px-2 py-1.5 text-xs text-slate-300 transition hover:bg-slate-700/50"
+                          className="flex-1 rounded-md border border-[#d9b3b3] px-2 py-1.5 text-xs text-stone-700 transition hover:bg-[#f3dede]"
                         >
                           Cancel
                         </button>
@@ -178,7 +178,7 @@ export default function StartMenu() {
         </div>
       </div>
 
-      <p className="absolute bottom-6 text-xs text-slate-600">
+      <p className="absolute bottom-6 text-xs text-stone-400">
         Search is powered by KIMI AI · sources are public record
       </p>
     </div>
@@ -189,7 +189,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="mt-1 text-center text-xs text-slate-500 transition hover:text-slate-300"
+      className="mt-1 text-center text-xs text-stone-400 transition hover:text-stone-700"
     >
       ← Back
     </button>

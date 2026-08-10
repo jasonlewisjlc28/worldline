@@ -56,39 +56,39 @@ export default function PersonPanel({
   ];
 
   return (
-    <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
+    <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-[#e3c4c4] bg-white/95 shadow-2xl backdrop-blur">
       <div className="flex-1 overflow-y-auto">
       {/* header */}
-      <div className="border-b border-slate-700/60 p-5">
+      <div className="border-b border-[#e3c4c4] p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-100">{person.name}</h2>
-            <p className="mt-1 text-sm text-amber-200/90">{person.title}</p>
-            <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+            <h2 className="text-xl font-bold text-stone-900">{person.name}</h2>
+            <p className="mt-1 text-sm text-[#92400e]">{person.title}</p>
+            <p className="mt-1 flex items-center gap-1 text-xs text-stone-500">
               <MapPin size={12} /> {person.country}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
+            className="rounded-md p-1.5 text-stone-500 transition hover:bg-[#f3dede] hover:text-stone-900"
             aria-label="Close panel"
           >
             <X size={18} />
           </button>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-slate-300">{person.summary}</p>
+        <p className="mt-3 text-sm leading-relaxed text-stone-700">{person.summary}</p>
       </div>
 
       {/* tabs */}
-      <div className="flex border-b border-slate-700/60">
+      <div className="flex border-b border-[#e3c4c4]">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 text-xs font-medium transition ${
               tab === t.key
-                ? "border-b-2 border-sky-400 bg-sky-400/10 text-sky-300"
-                : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
+                ? "border-b-2 border-sky-400 bg-[#b91c1c]/10 text-[#b91c1c]"
+                : "text-stone-500 hover:bg-[#f3dede]/30 hover:text-stone-800"
             }`}
           >
             {t.icon}
@@ -103,27 +103,27 @@ export default function PersonPanel({
           <div className="space-y-4">
             {myConnections.length > 0 && (
               <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-400">
                   On the map ({myConnections.length})
                 </h3>
                 <ul className="space-y-2">
                   {myConnections.map(({ connection, other }) => (
                     <li
                       key={connection.id}
-                      className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3 transition hover:border-violet-400/50"
+                      className="rounded-lg border border-[#b91c1c]/25 bg-[#b91c1c]/5 p-3 transition hover:border-[#b91c1c]/50"
                       onMouseEnter={() => onHoverPerson(other.id)}
                       onMouseLeave={() => onHoverPerson(null)}
                     >
                       <button
                         onClick={() => onSelectPerson(other.id)}
-                        className="text-left text-sm font-semibold text-violet-300 hover:text-violet-200"
+                        className="text-left text-sm font-semibold text-[#991b1b] hover:text-[#7f1d1d]"
                       >
                         {other.name}
-                        <span className="ml-2 text-xs font-normal text-slate-400">
+                        <span className="ml-2 text-xs font-normal text-stone-500">
                           {other.title}
                         </span>
                       </button>
-                      <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+                      <p className="mt-1.5 text-xs leading-relaxed text-stone-700">
                         {connection.summary}
                       </p>
                       {connection.alignment && (
@@ -134,7 +134,7 @@ export default function PersonPanel({
                           {connection.tags.split(",").map((tag) => (
                             <span
                               key={tag}
-                              className="rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300"
+                              className="rounded-full bg-[#f3dede] px-2 py-0.5 text-[10px] uppercase tracking-wide text-stone-700"
                             >
                               {tag.trim()}
                             </span>
@@ -149,7 +149,7 @@ export default function PersonPanel({
 
             {pendingSuggestions.length > 0 && (
               <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-400">
                   Suggested by AI ({pendingSuggestions.length})
                 </h3>
                 <ul className="space-y-2">
@@ -158,18 +158,18 @@ export default function PersonPanel({
                     return (
                       <li
                         key={s.name}
-                        className="flex items-start justify-between gap-3 rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
+                        className="flex items-start justify-between gap-3 rounded-lg border border-[#e3c4c4] bg-[#f9ecec] p-3"
                       >
                         <div>
-                          <p className="text-sm font-semibold text-slate-200">{s.name}</p>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                          <p className="text-sm font-semibold text-stone-800">{s.name}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-stone-500">
                             {s.reason}
                           </p>
                         </div>
                         <button
                           disabled={busyName !== null}
                           onClick={() => onAddSuggestion(s.name)}
-                          className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md bg-sky-500/90 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-sky-400 disabled:opacity-40"
+                          className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md bg-[#b91c1c] px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#991b1b] disabled:opacity-40"
                         >
                           {busy ? (
                             <Loader2 size={13} className="animate-spin" />
@@ -186,7 +186,7 @@ export default function PersonPanel({
             )}
 
             {myConnections.length === 0 && pendingSuggestions.length === 0 && (
-              <p className="py-8 text-center text-sm text-slate-500">
+              <p className="py-8 text-center text-sm text-stone-400">
                 No connections or suggestions yet.
               </p>
             )}
@@ -209,10 +209,10 @@ export default function PersonPanel({
       </div>
 
       {/* footer */}
-      <div className="border-t border-slate-700/60 p-3">
+      <div className="border-t border-[#e3c4c4] p-3">
         <button
           onClick={() => onRemove(person.id)}
-          className="w-full rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
+          className="w-full rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-500/20"
         >
           Remove from world
         </button>
@@ -224,10 +224,10 @@ export default function PersonPanel({
 
 
 function alignmentLabel(overall: number): { text: string; color: string; barColor: string } {
-  if (overall >= 2.4) return { text: "Strongly Aligned", color: "text-emerald-300", barColor: "bg-emerald-400" };
-  if (overall >= 1.8) return { text: "Partially Aligned", color: "text-amber-300", barColor: "bg-amber-400" };
-  if (overall >= 1.0) return { text: "Divergent", color: "text-orange-300", barColor: "bg-orange-400" };
-  return { text: "Hostile", color: "text-red-300", barColor: "bg-red-400" };
+  if (overall >= 2.4) return { text: "Strongly Aligned", color: "text-emerald-700", barColor: "bg-emerald-600" };
+  if (overall >= 1.8) return { text: "Partially Aligned", color: "text-amber-700", barColor: "bg-amber-500" };
+  if (overall >= 1.0) return { text: "Divergent", color: "text-orange-700", barColor: "bg-orange-500" };
+  return { text: "Hostile", color: "text-red-700", barColor: "bg-red-500" };
 }
 
 const DIMENSION_LABELS: [keyof Pick<AlignmentDto, "strategic" | "financial" | "trust" | "ideological">, string, number][] = [
@@ -242,7 +242,7 @@ function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
   const label = alignmentLabel(alignment.overall);
   const pct = Math.max(0, Math.min(100, (alignment.overall / 3) * 100));
   return (
-    <div className="mt-2 rounded-md border border-slate-700/60 bg-slate-800/40 p-2.5">
+    <div className="mt-2 rounded-md border border-[#e3c4c4] bg-[#f9ecec] p-2.5">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -253,25 +253,25 @@ function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
         <span className={`text-[11px] font-bold ${label.color}`}>
           {label.text} · {alignment.overall.toFixed(1)}/3
         </span>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[10px] text-stone-400">
           {expanded ? "hide breakdown ▲" : "breakdown ▼"}
         </span>
       </button>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/60">
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f3dede]">
         <div className={`h-full rounded-full ${label.barColor}`} style={{ width: `${pct}%` }} />
       </div>
       {expanded && (
-        <ul className="mt-2 space-y-1.5 border-t border-slate-700/50 pt-2">
+        <ul className="mt-2 space-y-1.5 border-t border-[#e3c4c4] pt-2">
           {DIMENSION_LABELS.map(([key, name, weight]) => (
             <li key={key}>
               <div className="flex items-center justify-between text-[10px]">
-                <span className="font-semibold text-slate-300">
-                  {name} <span className="font-normal text-slate-500">({weight}%)</span>
+                <span className="font-semibold text-stone-700">
+                  {name} <span className="font-normal text-stone-400">({weight}%)</span>
                 </span>
-                <span className="font-bold text-slate-200">{alignment[key]}/3</span>
+                <span className="font-bold text-stone-800">{alignment[key]}/3</span>
               </div>
               {alignment.reasons?.[key] && (
-                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                <p className="mt-0.5 text-[10px] leading-snug text-stone-400">
                   {alignment.reasons[key]}
                 </p>
               )}
@@ -299,7 +299,7 @@ function EntityList({
   onSelect?: (name: string) => void;
 }) {
   if (items.length === 0) {
-    return <p className="py-8 text-center text-sm text-slate-500">{empty}</p>;
+    return <p className="py-8 text-center text-sm text-stone-400">{empty}</p>;
   }
   return (
     <ul className="space-y-2">
@@ -308,16 +308,16 @@ function EntityList({
           <button
             type="button"
             onClick={onSelect ? () => onSelect(item.name) : undefined}
-            className={`w-full rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 text-left ${
+            className={`w-full rounded-lg border border-[#e3c4c4] bg-[#f9ecec] p-3 text-left ${
               onSelect
-                ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
+                ? "cursor-pointer transition hover:border-[#b91c1c]/50 hover:bg-[#b91c1c]/5"
                 : "cursor-default"
             }`}
           >
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-200">{item.name}</p>
+            <p className="text-sm font-semibold text-stone-800">{item.name}</p>
             {item.timeline && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] text-slate-300">
+              <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f3dede] px-2 py-0.5 text-[10px] text-stone-700">
                 <Check size={10} /> {item.timeline}
               </span>
             )}
@@ -327,9 +327,9 @@ function EntityList({
               <span
                 className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                   item.ownership === "state"
-                    ? "border-red-300/60 bg-red-400/15 text-white"
+                    ? "border-red-300/60 bg-red-500/15 text-white"
                     : item.ownership === "partial"
-                      ? "border-amber-300/60 bg-amber-400/15 text-white"
+                      ? "border-amber-300/60 bg-amber-500/15 text-white"
                       : "border-emerald-300/60 bg-emerald-300/15 text-white"
                 }`}
               >
@@ -342,9 +342,9 @@ function EntityList({
             </div>
           )}
           {item.role && (
-            <p className="mt-0.5 text-xs font-medium text-amber-200/80">{item.role}</p>
+            <p className="mt-0.5 text-xs font-medium text-[#92400e]/90">{item.role}</p>
           )}
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{item.summary}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{item.summary}</p>
           </button>
         </li>
       ))}
