@@ -129,7 +129,7 @@ Rules:
 - Output ONLY a single JSON object. No markdown, no commentary.
 - Base everything on verifiable public record (official biographies, government records, reputable journalism, court/financial disclosures). Do not invent relationships.
 - When describing relationships that involve contested or unverified claims, use cautious language ("reportedly", "according to public reporting") and prefer well-documented facts.
-- lat/lng: coordinates of the capital or primary city of the person's country of residence/activity (WGS84).
+- lat/lng: coordinates of the city where the person primarily resides or works — NOT just the country capital if they are known to live/work elsewhere (e.g. a Saint Petersburg-based figure gets Saint Petersburg, a figure based in Sochi gets Sochi). Only use the capital when it genuinely is their primary base. Precision to ~0.1 degree is fine.
 - summary: 80-140 words, neutral, factual.
 - suggestions: up to 6 real, living-or-recent people with the strongest documented political, financial or ideological relationships to this person. reason: one sentence explaining why they matter (close association, financial influence, political sway). Never list more than 6.
 - companies: organizations/companies the person invested in, worked for, founded, or is documented to be indebted to/influenced by. Each with summary (1-2 sentences), role, timeline (e.g. "1998–2004").

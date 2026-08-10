@@ -76,6 +76,28 @@ export default function PersonPanel({
         <p className="mt-3 text-sm leading-relaxed text-slate-300">{person.summary}</p>
       </div>
 
+      {/* relationship digest — intelligence-style, shown when connections exist */}
+      {myConnections.length > 0 && (
+        <div className="border-b border-slate-700/60 bg-violet-500/5 px-5 py-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300/80">
+            ◈ Relationship Assessment
+          </p>
+          <ul className="space-y-2">
+            {myConnections.map(({ connection, other }) => (
+              <li key={connection.id} className="text-xs leading-relaxed">
+                <button
+                  onClick={() => onSelectPerson(other.id)}
+                  className="font-semibold text-violet-300 hover:text-violet-200"
+                >
+                  {other.name}
+                </button>
+                <span className="text-slate-400"> — {connection.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* tabs */}
       <div className="flex border-b border-slate-700/60">
         {tabs.map((t) => (

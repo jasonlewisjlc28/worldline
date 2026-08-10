@@ -112,6 +112,39 @@ export default function WorldMap({
     [persons]
   );
 
+  // De-overlap: persons sharing (nearly) identical coordinates are fanned out
+  // into a ring around the shared point so every dot stays clickable & labeled.
+  const displayPos = useMemo(() => {
+    const groups = new Map<string, PersonDto[]>();
+    for (const p of persons) {
+      const key = `${p.lat.toFixed(1)},${p.lng.toFixed(1)}`;
+      const g = groups.get(key) ?? [];
+      g.push(p);
+      groups.set(key, g);
+    }
+    const pos = new Map<number, { lat: number; lng: number; grouped: boolean }>();
+    for (const g of groups.values()) {
+      if (g.length === 1) {
+        pos.set(g[0].id, { lat: g[0].lat, lng: g[0].lng, grouped: false });
+        continue;
+      }
+      // Ring offsets in degrees, scaled with latitude so they look even on the map
+      const latRad = (g[0].lat * Math.PI) / 180;
+      const radius = Math.min(6, 3 + g.length * 0.6);
+      g.forEach((p, i) => {
+        const angle = (2 * Math.PI * i) / g.length - Math.PI / 2;
+        pos.set(p.id, {
+          lat: g[0].lat + radius * Math.sin(angle),
+          lng: g[0].lng + (radius * Math.cos(angle)) / Math.max(0.3, Math.cos(latRad)),
+          grouped: true,
+        });
+      });
+    }
+    return pos;
+  }, [persons]);
+
+  const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng, grouped: false };
+
   const links = useMemo(() => {
     const out: {
       id: number;
@@ -124,21 +157,23 @@ export default function WorldMap({
       const a = personById.get(c.personAId);
       const b = personById.get(c.personBId);
       if (!a || !b) continue;
+      const pa = posOf(a);
+      const pb = posOf(b);
       // Route via antimeridian if that makes the path shorter (e.g. Russia–USA)
-      const direct = xDistance(project, a.lng, b.lng, (a.lat + b.lat) / 2);
+      const direct = xDistance(project, pa.lng, pb.lng, (pa.lat + pb.lat) / 2);
       const wrapped = xDistance(
         project,
-        a.lng > 0 ? a.lng - 360 : a.lng + 360,
-        b.lng,
-        (a.lat + b.lat) / 2
+        pa.lng > 0 ? pa.lng - 360 : pa.lng + 360,
+        pb.lng,
+        (pa.lat + pb.lat) / 2
       );
-      const aLng = wrapped < direct ? (a.lng > 0 ? a.lng - 360 : a.lng + 360) : a.lng;
+      const aLng = wrapped < direct ? (pa.lng > 0 ? pa.lng - 360 : pa.lng + 360) : pa.lng;
       const steps = 64;
       const pts: [number, number][] = [];
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const lng = aLng + (b.lng - aLng) * t;
-        const lat = a.lat + (b.lat - a.lat) * t;
+        const lng = aLng + (pb.lng - aLng) * t;
+        const lat = pa.lat + (pb.lat - pa.lat) * t;
         const p = project(lng, lat);
         if (p) pts.push(p);
       }
@@ -149,7 +184,8 @@ export default function WorldMap({
       out.push({ id: c.id, d, a, b, width: 1.5 });
     }
     return out;
-  }, [connections, personById, projection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections, personById, projection, displayPos]);
 
   const isLinkHighlighted = (aId: number, bId: number) => {
     if (selectedId != null && (aId === selectedId || bId === selectedId)) return true;
@@ -195,17 +231,18 @@ export default function WorldMap({
                 key={l.id}
                 d={l.d}
                 fill="none"
-                stroke={hot ? "#38bdf8" : "#7c5cd6"}
-                strokeOpacity={hot ? 0.95 : 0.45}
-                strokeWidth={hot ? 2.2 : l.width}
+                stroke={hot ? "#38bdf8" : "#8b6fe8"}
+                strokeOpacity={hot ? 0.95 : 0.7}
+                strokeWidth={hot ? 2.4 : 1.8}
                 style={{ transition: "stroke 200ms, stroke-opacity 200ms" }}
               />
             );
           })}
 
-          {/* person dots */}
+          {/* person dots (de-overlapped positions) */}
           {persons.map((p) => {
-            const pt = project(p.lng, p.lat);
+            const dp = posOf(p);
+            const pt = project(dp.lng, dp.lat);
             if (!pt) return null;
             const selected = p.id === selectedId;
             const highlighted = highlightIds?.has(p.id) ?? false;
