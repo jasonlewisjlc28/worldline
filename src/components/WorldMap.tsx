@@ -187,7 +187,7 @@ export default function WorldMap({
   };
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#070d1a]">
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#070d1a]"><div className="relative h-full w-full">
       <svg
         ref={svgRef}
         width={size.w}
@@ -313,6 +313,7 @@ export default function WorldMap({
           {hoveredCountry}
         </div>
       )}
+      </div>
       {persons.length === 0 && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-500">
           <p className="text-lg font-medium">This world is empty</p>

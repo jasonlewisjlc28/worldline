@@ -25,10 +25,10 @@ function OwnershipTag({ ownership }: { ownership?: EntityItem["ownership"] }) {
   if (!ownership) return null;
   const styles =
     ownership === "state"
-      ? "border-red-300/60 bg-red-400/15 text-red-200"
+      ? "border-red-300/60 bg-red-400/15 text-white"
       : ownership === "partial"
-        ? "border-amber-300/60 bg-amber-400/15 text-amber-200"
-        : "border-emerald-300/60 bg-emerald-300/15 text-emerald-200";
+        ? "border-amber-300/60 bg-amber-400/15 text-white"
+        : "border-emerald-300/60 bg-emerald-300/15 text-white";
   return (
     <span
       className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles}`}

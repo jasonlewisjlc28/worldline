@@ -22,10 +22,10 @@ function OwnershipTag({ ownership }: { ownership?: CompanyDto["ownership"] }) {
   if (!ownership) return null;
   const styles =
     ownership === "state"
-      ? "border-red-400/40 bg-red-400/10 text-red-300"
+      ? "border-red-300/60 bg-red-400/15 text-white"
       : ownership === "partial"
-        ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
-        : "border-emerald-300/60 bg-emerald-300/15 text-emerald-200";
+        ? "border-amber-300/60 bg-amber-400/15 text-white"
+        : "border-emerald-300/60 bg-emerald-300/15 text-white";
   return (
     <span
       className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles}`}
@@ -144,7 +144,7 @@ export default function CompanyPanel({
   const ownership = affiliations.find((a) => a.entry.ownership)?.entry.ownership;
 
   return (
-    <aside className="pointer-events-auto absolute right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
+    <aside className="pointer-events-auto absolute right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526] shadow-2xl">
       {/* header */}
       <div className="border-b border-slate-700/60 p-5">
         <div className="flex items-start justify-between gap-3">
