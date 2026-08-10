@@ -220,9 +220,18 @@ export const worldRouter = createRouter({
     return db.query.worlds.findMany({ orderBy: [desc(worlds.updatedAt)] });
   }),
 
-  create: publicQuery
-    .input(z.object({ name: z.string().min(1).max(255) }))
+  deleteWorld: publicQuery
+    .input(z.object({ worldId: z.number() }))
     .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.delete(connections).where(eq(connections.worldId, input.worldId));
+      await db.delete(persons).where(eq(persons.worldId, input.worldId));
+      await db.delete(worlds).where(eq(worlds.id, input.worldId));
+      return { ok: true };
+    }),
+
+  create: publicQuery
+    .input(z.object({ name: z.string().min(1).max(255) })).mutation(async ({ input }) => {
       const db = getDb();
       const [result] = await db.insert(worlds).values({ name: input.name });
       return db.query.worlds.findFirst({ where: eq(worlds.id, Number(result.insertId)) });

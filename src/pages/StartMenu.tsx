@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Globe2, Play, FolderOpen, Plus, Loader2, ChevronRight } from "lucide-react";
+import { Globe2, Play, FolderOpen, Plus, Loader2, ChevronRight, Trash2 } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 
 export default function StartMenu() {
@@ -13,6 +13,14 @@ export default function StartMenu() {
   const createMutation = trpc.world.create.useMutation({
     onSuccess: (world) => {
       if (world) navigate(`/world/${world.id}`);
+    },
+  });
+  const utils = trpc.useUtils();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const deleteMutation = trpc.world.deleteWorld.useMutation({
+    onSuccess: () => {
+      setConfirmDeleteId(null);
+      utils.world.list.invalidate();
     },
   });
 
@@ -113,19 +121,56 @@ export default function StartMenu() {
                 </p>
               )}
               {worldsQuery.data?.map((w) => (
-                <button
-                  key={w.id}
-                  className={menuButton}
-                  onClick={() => navigate(`/world/${w.id}`)}
-                >
-                  <span className="flex flex-col">
-                    <span className="font-medium">{w.name}</span>
-                    <span className="text-xs text-slate-500">
-                      Last opened {new Date(w.updatedAt).toLocaleDateString()}
+                <div key={w.id} className="relative">
+                  <button
+                    className={menuButton}
+                    onClick={() => navigate(`/world/${w.id}`)}
+                  >
+                    <span className="flex flex-col">
+                      <span className="font-medium">{w.name}</span>
+                      <span className="text-xs text-slate-500">
+                        Last opened {new Date(w.updatedAt).toLocaleDateString()}
+                      </span>
                     </span>
-                  </span>
-                  <ChevronRight size={16} className="opacity-40 group-hover:opacity-100" />
-                </button>
+                    <span className="flex items-center gap-2">
+                      <span
+                        role="button"
+                        aria-label={`Delete ${w.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(w.id);
+                        }}
+                        className="rounded-md p-1.5 text-slate-500 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
+                      >
+                        <Trash2 size={15} />
+                      </span>
+                      <ChevronRight size={16} className="opacity-40 group-hover:opacity-100" />
+                    </span>
+                  </button>
+                  {confirmDeleteId === w.id && (
+                    <div className="mt-1 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                      <p className="text-xs text-slate-300">
+                        Delete <span className="font-semibold">{w.name}</span> and
+                        everyone on it? This cannot be undone.
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => deleteMutation.mutate({ worldId: w.id })}
+                          disabled={deleteMutation.isPending}
+                          className="flex-1 rounded-md bg-red-500/80 px-2 py-1.5 text-xs font-medium text-white transition hover:bg-red-400 disabled:opacity-40"
+                        >
+                          {deleteMutation.isPending ? "Deleting…" : "Delete"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="flex-1 rounded-md border border-slate-600 px-2 py-1.5 text-xs text-slate-300 transition hover:bg-slate-700/50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ))}
               <BackButton onClick={() => setMode("menu")} />
             </div>
