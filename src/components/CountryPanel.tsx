@@ -25,9 +25,9 @@ function OwnershipTag({ ownership }: { ownership?: EntityItem["ownership"] }) {
   if (!ownership) return null;
   const styles =
     ownership === "state"
-      ? "border-red-400/40 bg-red-400/10 text-red-300"
+      ? "border-red-300/60 bg-red-400/15 text-red-200"
       : ownership === "partial"
-        ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
+        ? "border-amber-300/60 bg-amber-400/15 text-amber-200"
         : "border-emerald-300/60 bg-emerald-300/15 text-emerald-200";
   return (
     <span
@@ -165,7 +165,7 @@ function EntityList({
 }) {
   if (items.length === 0) {
     return (
-      <p className="text-xs text-slate-500 italic">
+      <p className="text-xs text-slate-300 italic">
         None mentioned by the figures on this map yet.
       </p>
     );
@@ -173,15 +173,16 @@ function EntityList({
   return (
     <ul className="space-y-2">
       {items.map((e) => (
-        <li
-          key={e.name}
-          onClick={onSelect ? () => onSelect(e.name) : undefined}
-          className={`rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 ${
-            onSelect
-              ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
-              : ""
-          }`}
-        >
+        <li key={e.name}>
+          <button
+            type="button"
+            onClick={onSelect ? () => onSelect(e.name) : undefined}
+            className={`w-full rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 text-left ${
+              onSelect
+                ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
+                : "cursor-default"
+            }`}
+          >
           <p className="text-sm font-semibold text-slate-100">{e.name}</p>
           {e.ownership && (
             <div className="mt-1.5">
@@ -193,6 +194,7 @@ function EntityList({
               {e.summary}
             </p>
           )}
+          </button>
         </li>
       ))}
     </ul>
@@ -245,7 +247,7 @@ export default function CountryPanel({
             count={persons.length}
           />
           {persons.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
+            <p className="text-xs text-slate-300 italic">
               Add someone from {countryName} via the search bar and they will
               appear here.
             </p>

@@ -240,15 +240,16 @@ function EntityList({
   return (
     <ul className="space-y-2">
       {items.map((item, i) => (
-        <li
-          key={`${item.name}-${i}`}
-          onClick={onSelect ? () => onSelect(item.name) : undefined}
-          className={`rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 ${
-            onSelect
-              ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
-              : ""
-          }`}
-        >
+        <li key={`${item.name}-${i}`}>
+          <button
+            type="button"
+            onClick={onSelect ? () => onSelect(item.name) : undefined}
+            className={`w-full rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 text-left ${
+              onSelect
+                ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
+                : "cursor-default"
+            }`}
+          >
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-slate-200">{item.name}</p>
             {item.timeline && (
@@ -280,6 +281,7 @@ function EntityList({
             <p className="mt-0.5 text-xs font-medium text-amber-200/80">{item.role}</p>
           )}
           <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{item.summary}</p>
+          </button>
         </li>
       ))}
     </ul>
