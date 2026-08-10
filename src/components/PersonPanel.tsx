@@ -10,6 +10,7 @@ export type PersonPanelProps = {
   onClose: () => void;
   onAddSuggestion: (suggestionName: string) => void;
   onSelectPerson: (id: number) => void;
+  onSelectCompany: (name: string) => void;
   onRemove: (personId: number) => void;
   onHoverPerson: (id: number | null) => void;
 };
@@ -24,6 +25,7 @@ export default function PersonPanel({
   onClose,
   onAddSuggestion,
   onSelectPerson,
+  onSelectCompany,
   onRemove,
   onHoverPerson,
 }: PersonPanelProps) {
@@ -192,6 +194,7 @@ export default function PersonPanel({
           <EntityList
             empty="No documented career entries."
             items={person.companies}
+            onSelect={onSelectCompany}
           />
         )}
         {tab === "parties" && (
@@ -219,6 +222,7 @@ export default function PersonPanel({
 function EntityList({
   items,
   empty,
+  onSelect,
 }: {
   items: {
     name: string;
@@ -228,6 +232,7 @@ function EntityList({
     ownership?: "state" | "partial" | "private";
   }[];
   empty: string;
+  onSelect?: (name: string) => void;
 }) {
   if (items.length === 0) {
     return <p className="py-8 text-center text-sm text-slate-500">{empty}</p>;
@@ -237,7 +242,12 @@ function EntityList({
       {items.map((item, i) => (
         <li
           key={`${item.name}-${i}`}
-          className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
+          onClick={onSelect ? () => onSelect(item.name) : undefined}
+          className={`rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 ${
+            onSelect
+              ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
+              : ""
+          }`}
         >
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-slate-200">{item.name}</p>

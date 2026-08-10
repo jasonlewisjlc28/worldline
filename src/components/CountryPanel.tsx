@@ -6,6 +6,7 @@ export type CountryPanelProps = {
   persons: PersonDto[];
   onClose: () => void;
   onSelectPerson: (id: number) => void;
+  onSelectCompany: (name: string) => void;
 };
 
 type EntityItem = {
@@ -155,7 +156,13 @@ function SectionHeader({
   );
 }
 
-function EntityList({ items }: { items: EntityItem[] }) {
+function EntityList({
+  items,
+  onSelect,
+}: {
+  items: EntityItem[];
+  onSelect?: (name: string) => void;
+}) {
   if (items.length === 0) {
     return (
       <p className="text-xs text-slate-500 italic">
@@ -168,7 +175,12 @@ function EntityList({ items }: { items: EntityItem[] }) {
       {items.map((e) => (
         <li
           key={e.name}
-          className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
+          onClick={onSelect ? () => onSelect(e.name) : undefined}
+          className={`rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 ${
+            onSelect
+              ? "cursor-pointer transition hover:border-sky-400/50 hover:bg-sky-400/5"
+              : ""
+          }`}
         >
           <p className="text-sm font-semibold text-slate-100">{e.name}</p>
           {e.ownership && (
@@ -192,6 +204,7 @@ export default function CountryPanel({
   persons,
   onClose,
   onSelectPerson,
+  onSelectCompany,
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
@@ -266,7 +279,7 @@ export default function CountryPanel({
             title="Companies"
             count={companies.length}
           />
-          <EntityList items={companies} />
+          <EntityList items={companies} onSelect={onSelectCompany} />
         </section>
 
         {/* Political Parties */}

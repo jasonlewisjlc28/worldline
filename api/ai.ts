@@ -239,3 +239,24 @@ export async function describeConnection(
     tags: String(parsed.tags ?? "political"),
   };
 }
+
+const COMPANY_ANALYSIS_SYSTEM = `You are the corporate-affiliation analysis engine of a geopolitical network-mapping website.
+Output ONLY a single JSON object: {"analysis": "..."}.
+Given a real person and a real company/organization, analyze the person's documented affiliation with it: roles held, money received (salary, contracts, dividends, documented payments), influence exercised or received, ownership stakes, and any other verifiable ties.
+Base everything on verifiable public record; use cautious language ("reportedly", "according to public reporting") for contested or unverified claims. 80-140 words.`;
+
+export async function analyzeCompanyAffiliation(
+  person: { name: string; title: string },
+  companyName: string,
+  known: { role: string; timeline: string; summary: string }
+): Promise<string> {
+  const raw = await chat([
+    { role: "system", content: COMPANY_ANALYSIS_SYSTEM },
+    {
+      role: "user",
+      content: `Analyze the affiliation between:\nPerson: ${person.name} — ${person.title}\nOrganization: ${companyName}\nAlready documented on the map: role "${known.role}" (${known.timeline}) — ${known.summary}`,
+    },
+  ]);
+  const parsed = parseJsonObject<{ analysis?: string }>(raw);
+  return String(parsed.analysis ?? "");
+}

@@ -3,7 +3,7 @@ import { and, asc, desc, eq, or } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { connections, persons, worlds } from "../db/schema";
-import { AIRequestError, AIUnavailableError, describeConnection, resolvePerson } from "./ai";
+import { AIRequestError, AIUnavailableError, analyzeCompanyAffiliation, describeConnection, resolvePerson } from "./ai";
 import { TRPCError } from "@trpc/server";
 import type {
   ConnectionDto,
@@ -310,5 +310,36 @@ export const worldRouter = createRouter({
         );
       await db.delete(persons).where(eq(persons.id, input.personId));
       return { ok: true };
+    }),
+
+  analyzeCompany: publicQuery
+    .input(
+      z.object({
+        worldId: z.number(),
+        personId: z.number(),
+        companyName: z.string().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const person = await db.query.persons.findFirst({
+        where: and(eq(persons.id, input.personId), eq(persons.worldId, input.worldId)),
+      });
+      if (!person) throw new Error("Person not found.");
+      const target = input.companyName.trim().toLowerCase();
+      const entry = ((person.companies as any[]) ?? []).find(
+        (c) => c?.name && String(c.name).trim().toLowerCase() === target
+      );
+      const analysis = await analyzeCompanyAffiliation(
+        { name: person.name, title: person.title ?? "" },
+        input.companyName,
+        {
+          role: String(entry?.role ?? ""),
+          timeline: String(entry?.timeline ?? ""),
+          summary: String(entry?.summary ?? ""),
+        }
+      );
+      if (!analysis) throw new AIRequestError("The AI returned an empty analysis.");
+      return { analysis };
     }),
 });

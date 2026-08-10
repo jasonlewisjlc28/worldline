@@ -5,6 +5,7 @@ import { trpc } from "@/providers/trpc";
 import WorldMap from "@/components/WorldMap";
 import PersonPanel from "@/components/PersonPanel";
 import CountryPanel from "@/components/CountryPanel";
+import CompanyPanel from "@/components/CompanyPanel";
 import SearchBar from "@/components/SearchBar";
 import DidYouMeanDialog from "@/components/DidYouMeanDialog";
 import { countryMatches } from "@/lib/countryMatch";
@@ -26,6 +27,7 @@ export default function WorldView() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [typo, setTypo] = useState<TypoState>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -225,6 +227,22 @@ export default function WorldView() {
             setSelectedId(pid);
             setSelectedCountry(null);
           }}
+          onSelectCompany={(name) => setSelectedCompany(name)}
+        />
+      )}
+
+      {/* company panel */}
+      {selectedCompany && (
+        <CompanyPanel
+          worldId={id}
+          companyName={selectedCompany}
+          persons={persons}
+          onClose={() => setSelectedCompany(null)}
+          onSelectPerson={(pid) => {
+            setSelectedCompany(null);
+            setSelectedId(pid);
+            setSelectedCountry(null);
+          }}
         />
       )}
 
@@ -244,6 +262,7 @@ export default function WorldView() {
             })
           }
           onSelectPerson={(pid) => setSelectedId(pid)}
+          onSelectCompany={(name) => setSelectedCompany(name)}
           onRemove={(pid) => removeMutation.mutate({ worldId: id, personId: pid })}
           onHoverPerson={setHoverId}
         />
