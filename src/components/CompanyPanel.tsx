@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, ArrowLeft, Building2, Users, Loader2, Sparkles } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import type { CompanyDto, PersonDto } from "@contracts/types";
@@ -143,8 +144,11 @@ export default function CompanyPanel({
   const headerSummary = affiliations.find((a) => a.entry.summary)?.entry.summary ?? "";
   const ownership = affiliations.find((a) => a.entry.ownership)?.entry.ownership;
 
-  return (
-    <aside className="pointer-events-auto absolute right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526] shadow-2xl">
+  // Render through a portal so no parent's backdrop-filter can demote this
+  // panel in the stacking order — that was making it open UNDER the country
+  // panel (invisible until the country panel was closed).
+  return createPortal(
+    <aside className="pointer-events-auto fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526] shadow-2xl">
       {/* header */}
       <div className="border-b border-slate-700/60 p-5">
         <div className="flex items-start justify-between gap-3">
@@ -215,6 +219,7 @@ export default function CompanyPanel({
           </ul>
         )}
       </div>
-    </aside>
+    </aside>,
+    document.body
   );
 }
