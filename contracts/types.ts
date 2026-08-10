@@ -38,6 +38,15 @@ export type PersonDto = {
   createdAt: string | Date;
 };
 
+export type AlignmentDto = {
+  strategic: number;
+  financial: number;
+  trust: number;
+  ideological: number;
+  overall: number;
+  reasons: { strategic: string; financial: string; trust: string; ideological: string };
+};
+
 export type ConnectionDto = {
   id: number;
   worldId: number;
@@ -45,6 +54,7 @@ export type ConnectionDto = {
   personBId: number;
   summary: string;
   tags: string;
+  alignment?: AlignmentDto | null;
   createdAt: string | Date;
 };
 

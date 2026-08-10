@@ -53,6 +53,15 @@ export const persons = mysqlTable("persons", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export type Alignment = {
+  strategic: number;
+  financial: number;
+  trust: number;
+  ideological: number;
+  overall: number;
+  reasons: { strategic: string; financial: string; trust: string; ideological: string };
+};
+
 export const connections = mysqlTable("connections", {
   id: serial("id").primaryKey(),
   worldId: bigint("world_id", { mode: "number", unsigned: true })
@@ -66,5 +75,6 @@ export const connections = mysqlTable("connections", {
     .references(() => persons.id),
   summary: text("summary"),
   tags: varchar("tags", { length: 255 }).notNull().default(""),
+  alignment: json("alignment").$type<Alignment>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

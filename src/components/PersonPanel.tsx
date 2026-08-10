@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { X, Plus, Building2, Users, Flag, MapPin, Loader2, Check } from "lucide-react";
-import type { ConnectionDto, PersonDto } from "@contracts/types";
+import type { AlignmentDto, ConnectionDto, PersonDto } from "@contracts/types";
 
 export type PersonPanelProps = {
   person: PersonDto;
@@ -126,6 +126,9 @@ export default function PersonPanel({
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
                         {connection.summary}
                       </p>
+                      {connection.alignment && (
+                        <AlignmentGauge alignment={connection.alignment} />
+                      )}
                       {connection.tags && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {connection.tags.split(",").map((tag) => (
@@ -216,6 +219,67 @@ export default function PersonPanel({
       </div>
       </div>
     </aside>
+  );
+}
+
+
+function alignmentLabel(overall: number): { text: string; color: string; barColor: string } {
+  if (overall >= 2.4) return { text: "Strongly Aligned", color: "text-emerald-300", barColor: "bg-emerald-400" };
+  if (overall >= 1.8) return { text: "Partially Aligned", color: "text-amber-300", barColor: "bg-amber-400" };
+  if (overall >= 1.0) return { text: "Divergent", color: "text-orange-300", barColor: "bg-orange-400" };
+  return { text: "Hostile", color: "text-red-300", barColor: "bg-red-400" };
+}
+
+const DIMENSION_LABELS: [keyof Pick<AlignmentDto, "strategic" | "financial" | "trust" | "ideological">, string, number][] = [
+  ["strategic", "Strategic interests", 35],
+  ["financial", "Financial interdependence", 25],
+  ["trust", "Personal loyalty / trust", 20],
+  ["ideological", "Ideological alignment", 20],
+];
+
+function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = alignmentLabel(alignment.overall);
+  const pct = Math.max(0, Math.min(100, (alignment.overall / 3) * 100));
+  return (
+    <div className="mt-2 rounded-md border border-slate-700/60 bg-slate-800/40 p-2.5">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded((v) => !v);
+        }}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className={`text-[11px] font-bold ${label.color}`}>
+          {label.text} · {alignment.overall.toFixed(1)}/3
+        </span>
+        <span className="text-[10px] text-slate-500">
+          {expanded ? "hide breakdown ▲" : "breakdown ▼"}
+        </span>
+      </button>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/60">
+        <div className={`h-full rounded-full ${label.barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      {expanded && (
+        <ul className="mt-2 space-y-1.5 border-t border-slate-700/50 pt-2">
+          {DIMENSION_LABELS.map(([key, name, weight]) => (
+            <li key={key}>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-semibold text-slate-300">
+                  {name} <span className="font-normal text-slate-500">({weight}%)</span>
+                </span>
+                <span className="font-bold text-slate-200">{alignment[key]}/3</span>
+              </div>
+              {alignment.reasons?.[key] && (
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                  {alignment.reasons[key]}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

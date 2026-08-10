@@ -265,24 +265,79 @@ STEP 1 — Directness test. A tie between two people only counts as DIRECT if at
 Second-hand connections do NOT count: merely belonging to the same party, government, or political system; sharing an ideology; knowing the same people; or being part of the same era. If no direct tie is documented, respond {"direct": false} and nothing else.
 
 STEP 2 — If (and only if) a direct tie exists, write an intelligence-analyst-style assessment of their relationship. Cover as applicable: shared or conflicting strategic interests; ideological alignment; money flows between them; institutional history; personal rapport, patronage, rivalry or strain. Base everything on verifiable public record; use cautious language ("reportedly", "according to public reporting") for contested claims. 90-150 words.
-Format when direct: {"direct": true, "strength": <integer 1-10 how strong/documented the direct tie is>, "summary": "...", "tags": "political, financial"} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
+
+STEP 3 — Interest-alignment matrix. Score each dimension 0-3 based on the documented record:
+- strategic (geopolitical/strategic interests): 3 = same core objectives, 2 = partially overlapping, 1 = unrelated/indifferent, 0 = direct conflict.
+- financial (financial interdependence): 3 = deep mutual dependence, 2 = some shared financial interests, 1 = none, 0 = financially hostile (sanctions, asset seizures).
+- trust (personal loyalty/trust): 3 = proven patronage/loyalty, 2 = functional working relationship, 1 = distant, 0 = rivalry/betrayal.
+- ideological (ideological alignment): 3 = same doctrine/movement, 2 = broad sympathy, 1 = unrelated, 0 = opposed ideologies.
+For each dimension give a one-sentence justification ("reason") grounded in public record.
+Format when direct: {"direct": true, "strength": <integer 1-10 how strong/documented the direct tie is>, "summary": "...", "tags": "political, financial", "alignment": {"strategic": 0-3, "financial": 0-3, "trust": 0-3, "ideological": 0-3, "reasons": {"strategic": "...", "financial": "...", "trust": "...", "ideological": "..."}}} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
 
 /** Minimum directness score (1-10) for a tie to be created at all. */
 const DIRECTNESS_THRESHOLD = 5;
 
+/** Weights for the interest-alignment matrix (sum to 1). */
+const ALIGNMENT_WEIGHTS = { strategic: 0.35, financial: 0.25, trust: 0.2, ideological: 0.2 } as const;
+
+export type Alignment = {
+  strategic: number;
+  financial: number;
+  trust: number;
+  ideological: number;
+  overall: number;
+  reasons: { strategic: string; financial: string; trust: string; ideological: string };
+};
+
+function clampScore(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0, Math.min(3, Math.round(n)));
+}
+
+function buildAlignment(raw: unknown): Alignment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const a = raw as Record<string, unknown>;
+  const reasons = (a.reasons ?? {}) as Record<string, unknown>;
+  const strategic = clampScore(a.strategic);
+  const financial = clampScore(a.financial);
+  const trust = clampScore(a.trust);
+  const ideological = clampScore(a.ideological);
+  const overall =
+    Math.round(
+      (strategic * ALIGNMENT_WEIGHTS.strategic +
+        financial * ALIGNMENT_WEIGHTS.financial +
+        trust * ALIGNMENT_WEIGHTS.trust +
+        ideological * ALIGNMENT_WEIGHTS.ideological) * 100
+    ) / 100;
+  return {
+    strategic,
+    financial,
+    trust,
+    ideological,
+    overall,
+    reasons: {
+      strategic: String(reasons.strategic ?? ""),
+      financial: String(reasons.financial ?? ""),
+      trust: String(reasons.trust ?? ""),
+      ideological: String(reasons.ideological ?? ""),
+    },
+  };
+}
+
 export async function describeConnection(
   a: { name: string; title: string },
   b: { name: string; title: string }
-): Promise<{ direct: boolean; strength: number; summary: string; tags: string }> {
+): Promise<{ direct: boolean; strength: number; summary: string; tags: string; alignment: Alignment | null }> {
   const call = (user: string) =>
     chat([
       { role: "system", content: CONNECTION_SYSTEM },
       { role: "user", content: user },
     ]);
-  const direct = `Assess whether a DIRECT connection exists between:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`;
+  const directPrompt = `Assess whether a DIRECT connection exists between:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`;
   let raw: string;
   try {
-    raw = await call(direct);
+    raw = await call(directPrompt);
   } catch (e) {
     if (!(e instanceof AIContentFilterError)) throw e;
     // The provider's safety filter can trip on certain heads of state. Retry
@@ -305,13 +360,16 @@ export async function describeConnection(
     strength?: number;
     summary?: string;
     tags?: string;
+    alignment?: unknown;
   }>(raw);
   const strength = Number(parsed.strength ?? 0);
+  const direct = parsed.direct === true && strength >= DIRECTNESS_THRESHOLD;
   return {
-    direct: parsed.direct === true && strength >= DIRECTNESS_THRESHOLD,
+    direct,
     strength,
     summary: String(parsed.summary ?? ""),
     tags: String(parsed.tags ?? "political"),
+    alignment: direct ? buildAlignment(parsed.alignment) : null,
   };
 }
 

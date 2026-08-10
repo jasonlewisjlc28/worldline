@@ -37,6 +37,7 @@ function toConnectionDto(c: typeof connections.$inferSelect): ConnectionDto {
     personBId: c.personBId,
     summary: c.summary ?? "",
     tags: c.tags,
+    alignment: (c.alignment as ConnectionDto["alignment"]) ?? null,
     createdAt: c.createdAt,
   };
 }
@@ -139,6 +140,7 @@ function linkToExistingInBackground(worldId: number, newcomer: PersonDto): void 
           personBId: Math.max(newcomer.id, other.id),
           summary: rel.summary,
           tags: rel.tags,
+          alignment: rel.alignment,
         });
       } catch (e) {
         // A single failed link shouldn't block the rest; AIUnavailable surfaces on next action.
@@ -284,7 +286,7 @@ export const worldRouter = createRouter({
               const rel = await describeConnection(
                 { name: src.name, title: src.title },
                 { name: dst.name, title: dst.title }
-              ).catch(() => ({ direct: false, strength: 0, summary: "", tags: "political" }));
+              ).catch(() => ({ direct: false, strength: 0, summary: "", tags: "political", alignment: null }));
               if (rel.direct) {
                 const [ins] = await db.insert(connections).values({
                   worldId: input.worldId,
@@ -292,6 +294,7 @@ export const worldRouter = createRouter({
                   personBId: pairB,
                   summary: rel.summary,
                   tags: rel.tags,
+                  alignment: rel.alignment,
                 });
                 const created = await db.query.connections.findFirst({
                   where: eq(connections.id, Number(ins.insertId)),
@@ -372,6 +375,7 @@ export const worldRouter = createRouter({
         personBId: pairB,
         summary: rel.summary,
         tags: rel.tags,
+        alignment: rel.alignment,
       });
       const created = await db.query.connections.findFirst({
         where: and(
