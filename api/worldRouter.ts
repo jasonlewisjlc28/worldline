@@ -221,9 +221,52 @@ export const worldRouter = createRouter({
   addSuggestion: publicQuery
     .input(z.object({ worldId: z.number(), personId: z.number(), suggestionName: z.string() }))
     .mutation(async ({ input }) => {
+      const db = getDb();
       const result = await runAddFlow(input.worldId, input.suggestionName);
+
+      // The added/duplicate person gets linked back to the person whose list
+      // they came from — this is the tie the user explicitly requested.
       if (result.type === "added" || result.type === "duplicate") {
         await markSuggestionAdded(input.personId, input.suggestionName);
+
+        const addedId = result.person.id;
+        const sourceId = input.personId;
+        if (addedId !== sourceId) {
+          const pairA = Math.min(addedId, sourceId);
+          const pairB = Math.max(addedId, sourceId);
+          const existing = await db.query.connections.findFirst({
+            where: and(
+              eq(connections.worldId, input.worldId),
+              eq(connections.personAId, pairA),
+              eq(connections.personBId, pairB)
+            ),
+          });
+          if (!existing) {
+            const [src, dst] = await Promise.all([
+              db.query.persons.findFirst({ where: eq(persons.id, sourceId) }),
+              db.query.persons.findFirst({ where: eq(persons.id, addedId) }),
+            ]);
+            if (src && dst) {
+              const rel = await describeConnection(
+                { name: src.name, title: src.title },
+                { name: dst.name, title: dst.title }
+              ).catch(() => ({ summary: "", tags: "political" }));
+              const [ins] = await db.insert(connections).values({
+                worldId: input.worldId,
+                personAId: pairA,
+                personBId: pairB,
+                summary: rel.summary,
+                tags: rel.tags,
+              });
+              const created = await db.query.connections.findFirst({
+                where: eq(connections.id, Number(ins.insertId)),
+              });
+              if (created && result.type === "added") {
+                result.newConnections = [...result.newConnections, toConnectionDto(created)];
+              }
+            }
+          }
+        }
       }
       return result;
     }),

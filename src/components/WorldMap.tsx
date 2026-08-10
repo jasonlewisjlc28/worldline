@@ -47,6 +47,7 @@ export default function WorldMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const [countries, setCountries] = useState<CountryFeature[]>([]);
   const [size, setSize] = useState({ w: 1200, h: 700 });
+  const [zoomK, setZoomK] = useState(1);
 
   useEffect(() => {
     fetch("/countries-110m.json")
@@ -95,6 +96,7 @@ export default function WorldMap({
       .scaleExtent([1, 12])
       .on("zoom", (event) => {
         g.attr("transform", event.transform.toString());
+        setZoomK(event.transform.k);
       });
     const sel = select(svg);
     sel.call(zoomBehavior);
@@ -128,9 +130,11 @@ export default function WorldMap({
         pos.set(g[0].id, { lat: g[0].lat, lng: g[0].lng, grouped: false });
         continue;
       }
-      // Ring offsets in degrees, scaled with latitude so they look even on the map
+      // Ring offsets in degrees, scaled with latitude so they look even on the map.
+      // Shrink the ring as the user zooms in so it doesn't become enormous.
       const latRad = (g[0].lat * Math.PI) / 180;
-      const radius = Math.min(6, 3 + g.length * 0.6);
+      const baseRadius = Math.min(6, 3 + g.length * 0.6);
+      const radius = baseRadius / Math.max(1, Math.sqrt(zoomK));
       g.forEach((p, i) => {
         const angle = (2 * Math.PI * i) / g.length - Math.PI / 2;
         pos.set(p.id, {
@@ -141,7 +145,7 @@ export default function WorldMap({
       });
     }
     return pos;
-  }, [persons]);
+  }, [persons, zoomK]);
 
   const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng, grouped: false };
 
