@@ -142,26 +142,48 @@ export async function resolvePerson(query: string): Promise<
   | { kind: "not_found" }
   | { kind: "person"; person: PersonPayload }
 > {
-  const raw = await chat([
-    { role: "system", content: PERSON_SYSTEM },
-    {
-      role: "user",
-      content: `User search query: "${query}"
+  const fetchProfile = async () => {
+    const raw = await chat([
+      { role: "system", content: PERSON_SYSTEM },
+      {
+        role: "user",
+        content: `User search query: "${query}"
 
 Decide:
 1. If the query is clearly a misspelling/typo of a specific well-known person, respond {"kind":"typo","didYouMean":"Correct Full Name"}.
 2. If the query does not correspond to any identifiable real public figure, respond {"kind":"not_found"}.
 3. Otherwise respond {"kind":"person","person":{...}} with the full profile object for the person the user most likely means (use their canonical full name).`,
-    },
-  ]);
-  const parsed = parseJsonObject<Record<string, unknown>>(raw);
-  if (parsed.kind === "typo" && typeof parsed.didYouMean === "string") {
-    return { kind: "typo", didYouMean: parsed.didYouMean };
+      },
+    ]);
+    const parsed = parseJsonObject<Record<string, unknown>>(raw);
+    if (parsed.kind === "typo" && typeof parsed.didYouMean === "string") {
+      return { kind: "typo" as const, didYouMean: parsed.didYouMean };
+    }
+    if (parsed.kind === "not_found") return { kind: "not_found" as const };
+    const p = parsed.person as PersonPayload | undefined;
+    if (!p || typeof p.name !== "string") {
+      throw new AIRequestError("AI returned a malformed profile.");
+    }
+    return { kind: "person" as const, person: normalizePerson(p) };
+  };
+
+  const result = await fetchProfile();
+  // The model occasionally omits required scalar fields; retry once before giving up.
+  if (
+    result.kind === "person" &&
+    (!result.person.title || !result.person.country || !result.person.lat)
+  ) {
+    const retry = await fetchProfile().catch(() => null);
+    if (retry?.kind === "person") {
+      const a = result.person;
+      const b = retry.person;
+      a.title = a.title || b.title;
+      a.country = a.country || b.country;
+      a.lat = a.lat || b.lat;
+      a.lng = a.lng || b.lng;
+    }
   }
-  if (parsed.kind === "not_found") return { kind: "not_found" };
-  const p = parsed.person as PersonPayload | undefined;
-  if (!p || typeof p.name !== "string") throw new AIRequestError("AI returned a malformed profile.");
-  return { kind: "person", person: normalizePerson(p) };
+  return result;
 }
 
 function normalizePerson(p: PersonPayload): PersonPayload {
