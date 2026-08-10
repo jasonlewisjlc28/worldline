@@ -134,7 +134,8 @@ Rules:
 - suggestions: up to 6 real, living-or-recent people with the strongest documented political, financial or ideological relationships to this person. reason: one sentence explaining why they matter (close association, financial influence, political sway). Never list more than 6.
 - companies: organizations/companies the person invested in, worked for, founded, or is documented to be indebted to/influenced by. Each with summary (1-2 sentences), role, timeline (e.g. "1998–2004").
 - parties: political parties the person has belonged to, with summary (1-2 sentences), role, timeline.
-- All fields are required; use [] for empty lists.`;
+- All fields are required; use [] for empty lists.
+- NEVER leave title, country, lat or lng empty — always provide your best determination (title = their most notable current/recent role; country = their country of citizenship or primary political activity, as a common short name like "Russia", "United States", "United Kingdom").`;
 
 export async function resolvePerson(query: string): Promise<
   | { kind: "typo"; didYouMean: string }

@@ -18,29 +18,20 @@ export type WorldMapProps = {
   connections: ConnectionDto[];
   selectedId: number | null;
   highlightIds?: Set<number>;
+  selectedCountry?: string | null;
   onSelect: (id: number) => void;
+  onCountryClick?: (countryName: string) => void;
   onBackgroundClick?: () => void;
 };
-
-/** Horizontal pixel distance between two longitudes at a given scale, with antimeridian wrap. */
-function xDistance(
-  project: (lng: number, lat: number) => [number, number] | null,
-  aLng: number,
-  bLng: number,
-  lat: number
-): number {
-  const a = project(aLng, lat);
-  const b = project(bLng, lat);
-  if (!a || !b) return Infinity;
-  return Math.abs(a[0] - b[0]);
-}
 
 export default function WorldMap({
   persons,
   connections,
   selectedId,
   highlightIds,
+  selectedCountry,
   onSelect,
+  onCountryClick,
   onBackgroundClick,
 }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -48,6 +39,8 @@ export default function WorldMap({
   const [countries, setCountries] = useState<CountryFeature[]>([]);
   const [size, setSize] = useState({ w: 1200, h: 700 });
   const [zoomK, setZoomK] = useState(1);
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     fetch("/countries-110m.json")
@@ -163,20 +156,16 @@ export default function WorldMap({
       if (!a || !b) continue;
       const pa = posOf(a);
       const pb = posOf(b);
-      // Route via antimeridian if that makes the path shorter (e.g. Russia–USA)
-      const direct = xDistance(project, pa.lng, pb.lng, (pa.lat + pb.lat) / 2);
-      const wrapped = xDistance(
-        project,
-        pa.lng > 0 ? pa.lng - 360 : pa.lng + 360,
-        pb.lng,
-        (pa.lat + pb.lat) / 2
-      );
-      const aLng = wrapped < direct ? (pa.lng > 0 ? pa.lng - 360 : pa.lng + 360) : pa.lng;
+      // Choose the shorter longitudinal direction (handle antimeridian crossings
+      // like Russia–USA), then sample the straight equirect segment in lng/lat.
+      let dLng = pb.lng - pa.lng;
+      if (dLng > 180) dLng -= 360;
+      if (dLng < -180) dLng += 360;
       const steps = 64;
       const pts: [number, number][] = [];
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const lng = aLng + (pb.lng - aLng) * t;
+        const lng = pa.lng + dLng * t;
         const lat = pa.lat + (pb.lat - pa.lat) * t;
         const p = project(lng, lat);
         if (p) pts.push(p);
@@ -204,6 +193,10 @@ export default function WorldMap({
         width={size.w}
         height={size.h}
         className="block cursor-grab active:cursor-grabbing"
+        onMouseMove={(e) => {
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) setCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        }}
         onClick={(e) => {
           if (e.target === svgRef.current) onBackgroundClick?.();
         }}
@@ -214,18 +207,31 @@ export default function WorldMap({
             d={pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? ""}
             fill="#0a1428"
           />
-          {/* graticule-ish subtle countries */}
-          {countries.map((c, i) => (
-            <path
-              key={c.id ?? i}
-              d={pathGen(c as never) ?? ""}
-              fill="#132039"
-              stroke="#1e3050"
-              strokeWidth={0.5}
-            >
-              <title>{c.properties?.name}</title>
-            </path>
-          ))}
+          {/* countries — hover highlights light blue, click opens the country panel */}
+          {countries.map((c, i) => {
+            const name = c.properties?.name ?? "";
+            const hovered = hoveredCountry === name;
+            const selected = selectedCountry === name;
+            return (
+              <path
+                key={c.id ?? i}
+                d={pathGen(c as never) ?? ""}
+                fill={selected ? "#1d4d7a" : hovered ? "#2b5d8f" : "#132039"}
+                stroke={hovered || selected ? "#7dd3fc" : "#1e3050"}
+                strokeWidth={hovered || selected ? 1 : 0.5}
+                className="cursor-pointer"
+                style={{ transition: "fill 150ms, stroke 150ms" }}
+                onMouseEnter={() => setHoveredCountry(name)}
+                onMouseLeave={() => setHoveredCountry(null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (name) onCountryClick?.(name);
+                }}
+              >
+                <title>{name}</title>
+              </path>
+            );
+          })}
 
           {/* connection arcs */}
           {links.map((l) => {
@@ -298,6 +304,15 @@ export default function WorldMap({
           })}
         </g>
       </svg>
+      {/* floating country name label follows the cursor */}
+      {hoveredCountry && cursor && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-md border border-sky-400/40 bg-[#0c1526]/95 px-2.5 py-1 text-xs font-semibold text-sky-200 shadow-lg"
+          style={{ left: cursor.x + 14, top: cursor.y + 10 }}
+        >
+          {hoveredCountry}
+        </div>
+      )}
       {persons.length === 0 && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-500">
           <p className="text-lg font-medium">This world is empty</p>

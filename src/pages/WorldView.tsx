@@ -4,8 +4,10 @@ import { Home, Globe2, Loader2 } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import WorldMap from "@/components/WorldMap";
 import PersonPanel from "@/components/PersonPanel";
+import CountryPanel from "@/components/CountryPanel";
 import SearchBar from "@/components/SearchBar";
 import DidYouMeanDialog from "@/components/DidYouMeanDialog";
+import { countryMatches } from "@/lib/countryMatch";
 import type { SearchResultDto } from "@contracts/types";
 
 type TypoState = { original: string; suggestion: string } | null;
@@ -23,6 +25,7 @@ export default function WorldView() {
   const statusQuery = trpc.world.status.useQuery();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [typo, setTypo] = useState<TypoState>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -134,6 +137,13 @@ export default function WorldView() {
     [detailQuery.data]
   );
   const selected = persons.find((p) => p.id === selectedId) ?? null;
+  const countryPersons = useMemo(
+    () =>
+      selectedCountry
+        ? persons.filter((p) => countryMatches(p.country, selectedCountry))
+        : [],
+    [persons, selectedCountry]
+  );
 
   const highlightIds = useMemo(() => {
     const s = new Set<number>();
@@ -168,9 +178,20 @@ export default function WorldView() {
         persons={persons}
         connections={connections}
         selectedId={selectedId}
+        selectedCountry={selectedCountry}
         highlightIds={highlightIds}
-        onSelect={(pid) => setSelectedId(pid)}
-        onBackgroundClick={() => setSelectedId(null)}
+        onSelect={(pid) => {
+          setSelectedId(pid);
+          setSelectedCountry(null);
+        }}
+        onCountryClick={(name) => {
+          setSelectedCountry(name);
+          setSelectedId(null);
+        }}
+        onBackgroundClick={() => {
+          setSelectedId(null);
+          setSelectedCountry(null);
+        }}
       />
 
       {/* top bar */}
@@ -193,6 +214,19 @@ export default function WorldView() {
         </div>
         <div className="w-20" />
       </div>
+
+      {/* country panel */}
+      {selectedCountry && !selected && (
+        <CountryPanel
+          countryName={selectedCountry}
+          persons={countryPersons}
+          onClose={() => setSelectedCountry(null)}
+          onSelectPerson={(pid) => {
+            setSelectedId(pid);
+            setSelectedCountry(null);
+          }}
+        />
+      )}
 
       {/* detail panel */}
       {selected && (
