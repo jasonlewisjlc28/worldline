@@ -61,9 +61,6 @@ export default function CountryPanel({
                   {p.title && (
                     <p className="mt-0.5 text-xs text-amber-200/80">{p.title}</p>
                   )}
-                  <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-slate-400">
-                    {p.summary}
-                  </p>
                 </button>
               </li>
             ))}
