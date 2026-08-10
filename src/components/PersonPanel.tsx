@@ -99,28 +99,6 @@ export default function PersonPanel({
       <div className="p-4">
         {tab === "people" && (
           <div className="space-y-4">
-            {/* relationship digest — intelligence-style, shown when connections exist */}
-            {myConnections.length > 0 && (
-              <section className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300/80">
-                  ◈ Relationship Assessment
-                </p>
-                <ul className="space-y-2">
-                  {myConnections.map(({ connection, other }) => (
-                    <li key={connection.id} className="text-xs leading-relaxed">
-                      <button
-                        onClick={() => onSelectPerson(other.id)}
-                        className="font-semibold text-violet-300 hover:text-violet-200"
-                      >
-                        {other.name}
-                      </button>
-                      <span className="text-slate-400"> — {connection.summary}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
             {myConnections.length > 0 && (
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
