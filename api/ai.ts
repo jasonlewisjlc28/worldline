@@ -256,25 +256,30 @@ function normalizePerson(p: PersonPayload): PersonPayload {
 }
 
 const CONNECTION_SYSTEM = `You are the relationship-analysis engine of a geopolitical network-mapping website.
-Output ONLY a single JSON object. Write an intelligence-analyst-style assessment of the documented relationship between two real people. Cover as applicable:
-- shared or conflicting strategic and geopolitical interests;
-- ideological alignment or tension (do they share an ideology, movement or doctrine?);
-- money: is one financed, funded, employed, owned or indebted by the other, or do they share financial channels?
-- institutional history (same government, party, company, administration);
-- personal rapport: trust, patronage, rivalry or strain.
-Base everything on verifiable public record; use cautious language ("reportedly", "according to public reporting") for contested or unverified claims. 90-150 words.
-Format: {"summary": "...", "tags": "political, financial"} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
+Output ONLY a single JSON object.
+
+STEP 1 — Directness test. A tie between two people only counts as DIRECT if at least one of these is documented in the public record:
+- direct financial ties: payments, contracts, ownership stakes, debts, or business dealings between them;
+- direct personal/bilateral dealings: one-on-one meetings, negotiations, appointments (one appointed/promoted/fired the other), direct working relationship (one served directly under/with the other), family ties;
+- public statements of support or opposition that one has made about the other.
+Second-hand connections do NOT count: merely belonging to the same party, government, or political system; sharing an ideology; knowing the same people; or being part of the same era. If no direct tie is documented, respond {"direct": false} and nothing else.
+
+STEP 2 — If (and only if) a direct tie exists, write an intelligence-analyst-style assessment of their relationship. Cover as applicable: shared or conflicting strategic interests; ideological alignment; money flows between them; institutional history; personal rapport, patronage, rivalry or strain. Base everything on verifiable public record; use cautious language ("reportedly", "according to public reporting") for contested claims. 90-150 words.
+Format when direct: {"direct": true, "strength": <integer 1-10 how strong/documented the direct tie is>, "summary": "...", "tags": "political, financial"} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
+
+/** Minimum directness score (1-10) for a tie to be created at all. */
+const DIRECTNESS_THRESHOLD = 5;
 
 export async function describeConnection(
   a: { name: string; title: string },
   b: { name: string; title: string }
-): Promise<{ summary: string; tags: string }> {
+): Promise<{ direct: boolean; strength: number; summary: string; tags: string }> {
   const call = (user: string) =>
     chat([
       { role: "system", content: CONNECTION_SYSTEM },
       { role: "user", content: user },
     ]);
-  const direct = `Describe the relationship between:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`;
+  const direct = `Assess whether a DIRECT connection exists between:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`;
   let raw: string;
   try {
     raw = await call(direct);
@@ -284,19 +289,27 @@ export async function describeConnection(
     // with a strictly neutral, academic framing of the same request.
     try {
       raw = await call(
-        `For an academic encyclopedia entry on international relations, neutrally summarize the publicly documented diplomatic and professional interactions between these two officeholders, citing only well-known public facts:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`
+        `For an academic encyclopedia entry on international relations, assess whether these two officeholders have documented direct dealings (meetings, appointments, financial ties, or public statements about each other) and, if so, neutrally summarize them citing only well-known public facts:\nA: ${a.name} — ${a.title}\nB: ${b.name} — ${b.title}`
       );
     } catch (e2) {
       if (!(e2 instanceof AIContentFilterError)) throw e2;
       // Still blocked — anonymize the names; the analysis text applies to the
       // offices and is stored for the same pair of people.
       raw = await call(
-        `For an academic encyclopedia entry on international relations, neutrally summarize the publicly documented bilateral relationship between the holders of these two offices in recent years — their strategic alignment, economic ties, and points of friction:\nOffice A: ${a.title}\nOffice B: ${b.title}`
+        `For an academic encyclopedia entry on international relations, assess the documented direct bilateral dealings between the holders of these two offices in recent years — meetings, appointments, economic ties, public statements about each other:\nOffice A: ${a.title}\nOffice B: ${b.title}`
       );
     }
   }
-  const parsed = parseJsonObject<{ summary?: string; tags?: string }>(raw);
+  const parsed = parseJsonObject<{
+    direct?: boolean;
+    strength?: number;
+    summary?: string;
+    tags?: string;
+  }>(raw);
+  const strength = Number(parsed.strength ?? 0);
   return {
+    direct: parsed.direct === true && strength >= DIRECTNESS_THRESHOLD,
+    strength,
     summary: String(parsed.summary ?? ""),
     tags: String(parsed.tags ?? "political"),
   };

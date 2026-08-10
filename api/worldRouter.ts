@@ -130,6 +130,9 @@ function linkToExistingInBackground(worldId: number, newcomer: PersonDto): void 
           { name: newcomer.name, title: newcomer.title },
           { name: other.name, title: other.title }
         );
+        // No documented direct tie → don't create the connection at all
+        // (also saves further processing on that pair).
+        if (!rel.direct) continue;
         await db.insert(connections).values({
           worldId,
           personAId: Math.min(newcomer.id, other.id),
@@ -272,19 +275,21 @@ export const worldRouter = createRouter({
               const rel = await describeConnection(
                 { name: src.name, title: src.title },
                 { name: dst.name, title: dst.title }
-              ).catch(() => ({ summary: "", tags: "political" }));
-              const [ins] = await db.insert(connections).values({
-                worldId: input.worldId,
-                personAId: pairA,
-                personBId: pairB,
-                summary: rel.summary,
-                tags: rel.tags,
-              });
-              const created = await db.query.connections.findFirst({
-                where: eq(connections.id, Number(ins.insertId)),
-              });
-              if (created && result.type === "added") {
-                result.newConnections = [...result.newConnections, toConnectionDto(created)];
+              ).catch(() => ({ direct: false, strength: 0, summary: "", tags: "political" }));
+              if (rel.direct) {
+                const [ins] = await db.insert(connections).values({
+                  worldId: input.worldId,
+                  personAId: pairA,
+                  personBId: pairB,
+                  summary: rel.summary,
+                  tags: rel.tags,
+                });
+                const created = await db.query.connections.findFirst({
+                  where: eq(connections.id, Number(ins.insertId)),
+                });
+                if (created && result.type === "added") {
+                  result.newConnections = [...result.newConnections, toConnectionDto(created)];
+                }
               }
             }
           }
@@ -347,6 +352,11 @@ export const worldRouter = createRouter({
         { name: pa.name, title: pa.title ?? "" },
         { name: pb.name, title: pb.title ?? "" }
       );
+      if (!rel.direct) {
+        throw new Error(
+          `No documented direct connection found between ${pa.name} and ${pb.name} — no tie was created.`
+        );
+      }
       await db.insert(connections).values({
         worldId: input.worldId,
         personAId: pairA,
