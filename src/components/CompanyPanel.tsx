@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { X, Building2, Users, Loader2, Sparkles } from "lucide-react";
+import { X, ArrowLeft, Building2, Users, Loader2, Sparkles } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import type { CompanyDto, PersonDto } from "@contracts/types";
 
@@ -8,6 +8,7 @@ export type CompanyPanelProps = {
   companyName: string;
   persons: PersonDto[];
   onClose: () => void;
+  onBack: () => void;
   onSelectPerson: (id: number) => void;
 };
 
@@ -125,6 +126,7 @@ export default function CompanyPanel({
   companyName,
   persons,
   onClose,
+  onBack,
   onSelectPerson,
 }: CompanyPanelProps) {
   const affiliations = useMemo<Affiliation[]>(() => {
@@ -142,7 +144,7 @@ export default function CompanyPanel({
   const ownership = affiliations.find((a) => a.entry.ownership)?.entry.ownership;
 
   return (
-    <aside className="pointer-events-auto absolute right-0 top-0 z-30 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/97 shadow-2xl backdrop-blur">
+    <aside className="pointer-events-auto absolute right-0 top-0 z-30 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
       {/* header */}
       <div className="border-b border-slate-700/60 p-5">
         <div className="flex items-start justify-between gap-3">
@@ -162,13 +164,22 @@ export default function CompanyPanel({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
-            aria-label="Close panel"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={onBack}
+              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
+              aria-label="Back to previous panel"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-700/50 hover:text-slate-100"
+              aria-label="Close panel"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
       </div>
 

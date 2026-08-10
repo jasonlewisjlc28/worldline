@@ -237,7 +237,12 @@ export default function WorldView() {
           worldId={id}
           companyName={selectedCompany}
           persons={persons}
-          onClose={() => setSelectedCompany(null)}
+          onClose={() => {
+            setSelectedCompany(null);
+            setSelectedCountry(null);
+            setSelectedId(null);
+          }}
+          onBack={() => setSelectedCompany(null)}
           onSelectPerson={(pid) => {
             setSelectedCompany(null);
             setSelectedId(pid);
