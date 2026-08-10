@@ -55,6 +55,7 @@ export default function PersonPanel({
 
   return (
     <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
+      <div className="flex-1 overflow-y-auto">
       {/* header */}
       <div className="border-b border-slate-700/60 p-5">
         <div className="flex items-start justify-between gap-3">
@@ -76,28 +77,6 @@ export default function PersonPanel({
         <p className="mt-3 text-sm leading-relaxed text-slate-300">{person.summary}</p>
       </div>
 
-      {/* relationship digest — intelligence-style, shown when connections exist */}
-      {myConnections.length > 0 && (
-        <div className="border-b border-slate-700/60 bg-violet-500/5 px-5 py-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300/80">
-            ◈ Relationship Assessment
-          </p>
-          <ul className="space-y-2">
-            {myConnections.map(({ connection, other }) => (
-              <li key={connection.id} className="text-xs leading-relaxed">
-                <button
-                  onClick={() => onSelectPerson(other.id)}
-                  className="font-semibold text-violet-300 hover:text-violet-200"
-                >
-                  {other.name}
-                </button>
-                <span className="text-slate-400"> — {connection.summary}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* tabs */}
       <div className="flex border-b border-slate-700/60">
         {tabs.map((t) => (
@@ -117,9 +96,31 @@ export default function PersonPanel({
       </div>
 
       {/* body */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="p-4">
         {tab === "people" && (
           <div className="space-y-4">
+            {/* relationship digest — intelligence-style, shown when connections exist */}
+            {myConnections.length > 0 && (
+              <section className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300/80">
+                  ◈ Relationship Assessment
+                </p>
+                <ul className="space-y-2">
+                  {myConnections.map(({ connection, other }) => (
+                    <li key={connection.id} className="text-xs leading-relaxed">
+                      <button
+                        onClick={() => onSelectPerson(other.id)}
+                        className="font-semibold text-violet-300 hover:text-violet-200"
+                      >
+                        {other.name}
+                      </button>
+                      <span className="text-slate-400"> — {connection.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {myConnections.length > 0 && (
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -231,6 +232,7 @@ export default function PersonPanel({
         >
           Remove from world
         </button>
+      </div>
       </div>
     </aside>
   );
