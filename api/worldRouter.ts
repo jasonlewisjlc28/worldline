@@ -53,7 +53,18 @@ async function getWorldDetail(worldId: number): Promise<WorldDetailDto> {
     where: eq(connections.worldId, worldId),
     orderBy: [asc(connections.id)],
   });
-  return { world, persons: ps.map(toPersonDto), connections: cs.map(toConnectionDto) };
+
+  // Never surface a suggestion that points to someone already on the map.
+  const takenNames = new Set(ps.map((p) => p.name.toLowerCase()));
+  const personsOut = ps.map((p) => {
+    const dto = toPersonDto(p);
+    dto.suggestions = dto.suggestions.filter(
+      (s) => !takenNames.has(s.name.toLowerCase()) || s.status === "added"
+    );
+    return dto;
+  });
+
+  return { world, persons: personsOut, connections: cs.map(toConnectionDto) };
 }
 
 function aiErrorToTrpc(e: unknown): never {
@@ -182,6 +193,17 @@ async function runAddFlow(worldId: number, query: string): Promise<SearchResultD
   const person = await insertPerson(worldId, payload);
   const pendingLinks = await pendingLinkCount(worldId, person.id);
   linkToExistingInBackground(worldId, person);
+
+  // Strip suggestions that name people already on the map — both from the
+  // DB record and the response, so the People tab never offers them again.
+  const allNow = await db.query.persons.findMany({ where: eq(persons.worldId, worldId) });
+  const takenNames = new Set(allNow.map((p) => p.name.toLowerCase()));
+  const filtered = person.suggestions.filter((s) => !takenNames.has(s.name.toLowerCase()));
+  if (filtered.length !== person.suggestions.length) {
+    await db.update(persons).set({ suggestions: filtered }).where(eq(persons.id, person.id));
+    person.suggestions = filtered;
+  }
+
   return { type: "added", person, newConnections: [], pendingLinks };
 }
 
