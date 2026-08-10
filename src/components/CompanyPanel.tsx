@@ -144,7 +144,7 @@ export default function CompanyPanel({
   const ownership = affiliations.find((a) => a.entry.ownership)?.entry.ownership;
 
   return (
-    <aside className="pointer-events-auto absolute right-0 top-0 z-30 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
+    <aside className="pointer-events-auto absolute right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-slate-700/60 bg-[#0c1526]/95 shadow-2xl backdrop-blur">
       {/* header */}
       <div className="border-b border-slate-700/60 p-5">
         <div className="flex items-start justify-between gap-3">

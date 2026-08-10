@@ -218,14 +218,18 @@ export default function WorldView() {
       </div>
 
       {/* country panel */}
-      {selectedCountry && !selected && (
+      {(selectedCountry || selectedCompany) && !selected && (
         <CountryPanel
-          countryName={selectedCountry}
+          countryName={selectedCountry ?? ""}
           persons={countryPersons}
-          onClose={() => setSelectedCountry(null)}
+          onClose={() => {
+            setSelectedCountry(null);
+            setSelectedCompany(null);
+          }}
           onSelectPerson={(pid) => {
             setSelectedId(pid);
             setSelectedCountry(null);
+            setSelectedCompany(null);
           }}
           onSelectCompany={(name) => setSelectedCompany(name)}
         />
@@ -242,7 +246,10 @@ export default function WorldView() {
             setSelectedCountry(null);
             setSelectedId(null);
           }}
-          onBack={() => setSelectedCompany(null)}
+          onBack={() => {
+            // Return to whatever was open before the company panel.
+            setSelectedCompany(null);
+          }}
           onSelectPerson={(pid) => {
             setSelectedCompany(null);
             setSelectedId(pid);
