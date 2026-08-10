@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Home, Globe2, Loader2 } from "lucide-react";
+import { Home, Globe2, Loader2, Link2 } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import WorldMap from "@/components/WorldMap";
 import PersonPanel from "@/components/PersonPanel";
@@ -8,6 +8,7 @@ import CountryPanel from "@/components/CountryPanel";
 import CompanyPanel from "@/components/CompanyPanel";
 import SearchBar from "@/components/SearchBar";
 import DidYouMeanDialog from "@/components/DidYouMeanDialog";
+import CreateConnectionDialog from "@/components/CreateConnectionDialog";
 import { countryMatches } from "@/lib/countryMatch";
 import type { SearchResultDto } from "@contracts/types";
 
@@ -28,6 +29,7 @@ export default function WorldView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [typo, setTypo] = useState<TypoState>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -198,12 +200,22 @@ export default function WorldView() {
 
       {/* top bar */}
       <div className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-4">
-        <button
-          onClick={() => navigate("/")}
-          className="pointer-events-auto flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-3 py-2 text-xs font-medium text-slate-300 backdrop-blur transition hover:border-sky-400/60 hover:text-sky-300"
-        >
-          <Home size={14} /> Menu
-        </button>
+        <div className="pointer-events-auto flex flex-col items-start gap-2">
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-3 py-2 text-xs font-medium text-slate-300 backdrop-blur transition hover:border-sky-400/60 hover:text-sky-300"
+          >
+            <Home size={14} /> Menu
+          </button>
+          {persons.length >= 2 && (
+            <button
+              onClick={() => setConnectOpen((v) => !v)}
+              className="flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-3 py-2 text-xs font-medium text-slate-300 backdrop-blur transition hover:border-sky-400/60 hover:text-sky-300"
+            >
+              <Link2 size={14} /> Create connection
+            </button>
+          )}
+        </div>
         <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-slate-700/70 bg-[#0c1526]/90 px-4 py-2 backdrop-blur">
           <Globe2 size={14} className="text-sky-400" />
           <span className="text-sm font-semibold text-slate-200">
@@ -277,6 +289,21 @@ export default function WorldView() {
           onSelectCompany={(name) => setSelectedCompany(name)}
           onRemove={(pid) => removeMutation.mutate({ worldId: id, personId: pid })}
           onHoverPerson={setHoverId}
+        />
+      )}
+
+      {/* create connection dialog */}
+      {connectOpen && (
+        <CreateConnectionDialog
+          worldId={id}
+          persons={persons}
+          connections={connections}
+          preselectedA={selectedId}
+          onClose={() => setConnectOpen(false)}
+          onCreated={(a, b) => {
+            showNotice(`Tie created: ${a} ↔ ${b}.`);
+            utils.world.detail.invalidate({ worldId: id });
+          }}
         />
       )}
 

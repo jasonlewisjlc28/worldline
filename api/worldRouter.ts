@@ -312,6 +312,58 @@ export const worldRouter = createRouter({
       return { ok: true };
     }),
 
+  createConnection: publicQuery
+    .input(
+      z.object({
+        worldId: z.number(),
+        personAId: z.number(),
+        personBId: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      if (input.personAId === input.personBId)
+        throw new Error("Choose two different people.");
+      const db = getDb();
+      const pairA = Math.min(input.personAId, input.personBId);
+      const pairB = Math.max(input.personAId, input.personBId);
+      const existing = await db.query.connections.findFirst({
+        where: and(
+          eq(connections.worldId, input.worldId),
+          eq(connections.personAId, pairA),
+          eq(connections.personBId, pairB)
+        ),
+      });
+      if (existing) return { connection: existing, alreadyExisted: true };
+      const [pa, pb] = await Promise.all([
+        db.query.persons.findFirst({
+          where: and(eq(persons.id, pairA), eq(persons.worldId, input.worldId)),
+        }),
+        db.query.persons.findFirst({
+          where: and(eq(persons.id, pairB), eq(persons.worldId, input.worldId)),
+        }),
+      ]);
+      if (!pa || !pb) throw new Error("Both people must be on this map.");
+      const rel = await describeConnection(
+        { name: pa.name, title: pa.title ?? "" },
+        { name: pb.name, title: pb.title ?? "" }
+      );
+      await db.insert(connections).values({
+        worldId: input.worldId,
+        personAId: pairA,
+        personBId: pairB,
+        summary: rel.summary,
+        tags: rel.tags,
+      });
+      const created = await db.query.connections.findFirst({
+        where: and(
+          eq(connections.worldId, input.worldId),
+          eq(connections.personAId, pairA),
+          eq(connections.personBId, pairB)
+        ),
+      });
+      return { connection: created, alreadyExisted: false };
+    }),
+
   analyzeCompany: publicQuery
     .input(
       z.object({
