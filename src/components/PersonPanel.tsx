@@ -49,7 +49,7 @@ export default function PersonPanel({
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: "people", label: "People", icon: <Users size={15} /> },
-    { key: "companies", label: "Companies", icon: <Building2 size={15} /> },
+    { key: "companies", label: "Career Path", icon: <Building2 size={15} /> },
     { key: "parties", label: "Political Party", icon: <Flag size={15} /> },
   ];
 
@@ -190,7 +190,7 @@ export default function PersonPanel({
 
         {tab === "companies" && (
           <EntityList
-            empty="No documented company involvements."
+            empty="No documented career entries."
             items={person.companies}
           />
         )}

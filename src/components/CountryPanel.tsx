@@ -10,6 +10,58 @@ export type CountryPanelProps = {
 
 type EntityItem = { name: string; summary: string };
 
+const GOV_KEYWORDS = [
+  "government",
+  "administration",
+  "ministry",
+  "ministries",
+  "city ",
+  "city of",
+  "municipal",
+  "state ",
+  "state-",
+  "parliament",
+  "duma",
+  "congress",
+  "senate",
+  "council",
+  "committee",
+  "kremlin",
+  "white house",
+  "downing street",
+  "intelligence",
+  "security service",
+  "secret service",
+  "armed forces",
+  "military",
+  "army",
+  "navy",
+  "air force",
+  "police",
+  "bureau",
+  "agency",
+  "department",
+  "embassy",
+  "kgb",
+  "fsb",
+  "cia",
+  "fbi",
+  "mi5",
+  "mi6",
+  "mossad",
+  "central bank",
+  "supreme court",
+  "court",
+  "united nations",
+  "nato",
+  "european union",
+];
+
+function isGovernmentEntity(e: EntityItem): boolean {
+  const text = `${e.name} ${e.summary}`.toLowerCase();
+  return GOV_KEYWORDS.some((k) => text.includes(k));
+}
+
 function collectEntities(
   persons: PersonDto[],
   key: "companies" | "parties",
@@ -18,10 +70,10 @@ function collectEntities(
   for (const p of persons) {
     for (const e of p[key] ?? []) {
       if (!e?.name) continue;
+      const item = { name: e.name, summary: e.summary ?? "" };
+      if (key === "companies" && isGovernmentEntity(item)) continue;
       const k = e.name.trim().toLowerCase();
-      if (!map.has(k)) {
-        map.set(k, { name: e.name, summary: e.summary ?? "" });
-      }
+      if (!map.has(k)) map.set(k, item);
     }
   }
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
