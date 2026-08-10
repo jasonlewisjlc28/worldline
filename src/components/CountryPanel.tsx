@@ -15,11 +15,8 @@ const GOV_KEYWORDS = [
   "administration",
   "ministry",
   "ministries",
-  "city ",
-  "city of",
+  "city administration",
   "municipal",
-  "state ",
-  "state-",
   "parliament",
   "duma",
   "congress",
@@ -39,8 +36,6 @@ const GOV_KEYWORDS = [
   "air force",
   "police",
   "bureau",
-  "agency",
-  "department",
   "embassy",
   "kgb",
   "fsb",
@@ -51,15 +46,43 @@ const GOV_KEYWORDS = [
   "mossad",
   "central bank",
   "supreme court",
-  "court",
   "united nations",
   "nato",
   "european union",
 ];
 
+const COMPANY_MARKERS = [
+  "gazprom",
+  "rosneft",
+  "corp",
+  "corporation",
+  "inc",
+  "ltd",
+  "llc",
+  "plc",
+  "s.a.",
+  "gmbh",
+  "group",
+  "holdings",
+  "company",
+  "co.",
+  "bank ",
+  "airlines",
+  "energy",
+  "oil",
+  "gas",
+  "media",
+  "news",
+  "tv",
+  "industries",
+];
+
 function isGovernmentEntity(e: EntityItem): boolean {
-  const text = `${e.name} ${e.summary}`.toLowerCase();
-  return GOV_KEYWORDS.some((k) => text.includes(k));
+  const name = e.name.toLowerCase();
+  // Names that clearly denote a business stay, even if the summary says
+  // "state-owned" (e.g. Gazprom, Rosneft).
+  if (COMPANY_MARKERS.some((m) => name.includes(m))) return false;
+  return GOV_KEYWORDS.some((k) => name.includes(k));
 }
 
 function collectEntities(
