@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { geoNaturalEarth1, geoPath } from "d3-geo";
-import { zoom as d3zoom, type ZoomBehavior } from "d3-zoom";
+import { geoOrthographic, geoPath, geoGraticule10, geoDistance } from "d3-geo";
+import { drag } from "d3-drag";
+import { zoom as d3zoom } from "d3-zoom";
 import { select } from "d3-selection";
 import { feature } from "topojson-client";
 import type { Topology } from "topojson-specification";
@@ -24,6 +25,13 @@ export type WorldMapProps = {
   onBackgroundClick?: () => void;
 };
 
+// Reference-site palette: cream canvas, ink lines, soft glow dots, red accents.
+const INK = "#292524";
+const INK_SOFT = "#a8a29e";
+const CREAM = "#f4f1ea";
+const LAND = "#ece7dd";
+const RED = "#b91c1c";
+
 export default function WorldMap({
   persons,
   connections,
@@ -37,9 +45,11 @@ export default function WorldMap({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [countries, setCountries] = useState<CountryFeature[]>([]);
-  const [size, setSize] = useState({ w: 1200, h: 700 });
-  const [zoomK, setZoomK] = useState(1);
+  const [size, setSize] = useState({ w: 1200, h: 800 });
+  const [rotation, setRotation] = useState<[number, number, number]>([-20, -30, 0]);
+  const [globeK, setGlobeK] = useState(1);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const [hoveredPerson, setHoveredPerson] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -65,50 +75,58 @@ export default function WorldMap({
     return () => ro.disconnect();
   }, []);
 
+  const baseRadius = Math.min(size.w, size.h) * 0.42;
+
   const { projection, pathGen } = useMemo(() => {
-    const projection = geoNaturalEarth1().fitExtent(
-      [
-        [10, 10],
-        [size.w - 10, size.h - 10],
-      ],
-      { type: "Sphere" } as unknown as GeoJSON.Feature
-    );
+    const projection = geoOrthographic()
+      .translate([size.w / 2, size.h / 2])
+      .scale(baseRadius * globeK)
+      .rotate(rotation)
+      .clipAngle(90);
     const pathGen = geoPath(projection);
     return { projection, pathGen };
-  }, [size]);
+  }, [size, rotation, globeK, baseRadius]);
 
-  // Pan & zoom
+  // Drag to rotate the globe; wheel to zoom (scale extent keeps the globe sane).
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
-    const g = select(svg).select<SVGGElement>("g.map-root");
-    const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = d3zoom<
-      SVGSVGElement,
-      unknown
-    >()
-      .scaleExtent([1, 12])
-      .on("zoom", (event) => {
-        g.attr("transform", event.transform.toString());
-        setZoomK(event.transform.k);
-      });
     const sel = select(svg);
+
+    const dragBehavior = drag<SVGSVGElement, unknown>().on("drag", (event: { dx: number; dy: number }) => {
+      setRotation((prev) => {
+        const sensitivity = 0.35 / Math.max(0.6, globeK);
+        const next: [number, number, number] = [
+          prev[0] + event.dx * sensitivity,
+          Math.max(-85, Math.min(85, prev[1] - event.dy * sensitivity)),
+          0,
+        ];
+        return next;
+      });
+    });
+
+    const zoomBehavior = d3zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.8, 6])
+      .on("zoom", (event) => setGlobeK(event.transform.k));
+
+    sel.call(dragBehavior);
     sel.call(zoomBehavior);
-    sel.on("dblclick.zoom", null); // disable dblclick zoom so clicks feel instant
+    sel.on("dblclick.zoom", null);
     return () => {
+      sel.on(".drag", null);
       sel.on(".zoom", null);
     };
-  }, []);
+  }, [globeK]);
 
-  const project = (lng: number, lat: number): [number, number] | null =>
-    projection([lng, lat]) as [number, number] | null;
+  const isVisible = (lng: number, lat: number) =>
+    geoDistance([lng, lat], [-rotation[0], -rotation[1]]) < Math.PI / 2;
 
   const personById = useMemo(
     () => new Map(persons.map((p) => [p.id, p])),
     [persons]
   );
 
-  // De-overlap: persons sharing (nearly) identical coordinates are fanned out
-  // into a ring around the shared point so every dot stays clickable & labeled.
+  // De-overlap: persons sharing (nearly) identical coordinates fan out into a ring.
   const displayPos = useMemo(() => {
     const groups = new Map<string, PersonDto[]>();
     for (const p of persons) {
@@ -117,110 +135,97 @@ export default function WorldMap({
       g.push(p);
       groups.set(key, g);
     }
-    const pos = new Map<number, { lat: number; lng: number; grouped: boolean }>();
+    const pos = new Map<number, { lat: number; lng: number }>();
     for (const g of groups.values()) {
       if (g.length === 1) {
-        pos.set(g[0].id, { lat: g[0].lat, lng: g[0].lng, grouped: false });
+        pos.set(g[0].id, { lat: g[0].lat, lng: g[0].lng });
         continue;
       }
-      // Ring offsets in degrees, scaled with latitude so they look even on the map.
-      // Shrink the ring as the user zooms in so it doesn't become enormous.
       const latRad = (g[0].lat * Math.PI) / 180;
-      const baseRadius = Math.min(6, 3 + g.length * 0.6);
-      const radius = baseRadius / Math.max(1, Math.sqrt(zoomK));
+      const baseRing = Math.min(6, 3 + g.length * 0.6);
+      const radius = baseRing / Math.max(1, Math.sqrt(globeK));
       g.forEach((p, i) => {
         const angle = (2 * Math.PI * i) / g.length - Math.PI / 2;
         pos.set(p.id, {
           lat: g[0].lat + radius * Math.sin(angle),
           lng: g[0].lng + (radius * Math.cos(angle)) / Math.max(0.3, Math.cos(latRad)),
-          grouped: true,
         });
       });
     }
     return pos;
-  }, [persons, zoomK]);
+  }, [persons, globeK]);
 
-  const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng, grouped: false };
+  const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng };
 
-  const links = useMemo(() => {
-    const out: {
-      id: number;
-      d: string;
-      a: PersonDto;
-      b: PersonDto;
-      width: number;
-    }[] = [];
+  // Arcs only for the selected person — thin curves lifted above the surface.
+  const arcs = useMemo(() => {
+    if (selectedId == null) return [];
+    const out: { id: number; d: string }[] = [];
     for (const c of connections) {
+      if (c.personAId !== selectedId && c.personBId !== selectedId) continue;
       const a = personById.get(c.personAId);
       const b = personById.get(c.personBId);
       if (!a || !b) continue;
       const pa = posOf(a);
       const pb = posOf(b);
-      // Choose the shorter longitudinal direction (handle antimeridian crossings
-      // like Russia–USA), then sample the straight equirect segment in lng/lat.
-      let dLng = pb.lng - pa.lng;
-      if (dLng > 180) dLng -= 360;
-      if (dLng < -180) dLng += 360;
-      const steps = 64;
-      const pts: [number, number][] = [];
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const lng = pa.lng + dLng * t;
-        const lat = pa.lat + (pb.lat - pa.lat) * t;
-        const p = project(lng, lat);
-        if (p) pts.push(p);
-      }
-      if (pts.length < 2) continue;
-      const d =
-        `M${pts[0][0]},${pts[0][1]}` +
-        pts.slice(1).map((p) => `L${p[0]},${p[1]}`).join("");
-      out.push({ id: c.id, d, a, b, width: 1.5 });
+      const sa = projection([pa.lng, pa.lat]);
+      const sb = projection([pb.lng, pb.lat]);
+      if (!sa || !sb) continue;
+      const mx = (sa[0] + sb[0]) / 2;
+      const my = (sa[1] + sb[1]) / 2;
+      const cx = size.w / 2;
+      const cy = size.h / 2;
+      // Control point pushed outward from globe center → arc lifts off the surface.
+      const lift = 1.18;
+      const qx = cx + (mx - cx) * lift;
+      const qy = cy + (my - cy) * lift;
+      out.push({ id: c.id, d: `M${sa[0]},${sa[1]} Q${qx},${qy} ${sb[0]},${sb[1]}` });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connections, personById, projection, displayPos]);
+  }, [selectedId, connections, personById, projection, displayPos, size]);
 
-  const isLinkHighlighted = (aId: number, bId: number) => {
-    if (selectedId != null && (aId === selectedId || bId === selectedId)) return true;
-    if (highlightIds && (highlightIds.has(aId) || highlightIds.has(bId))) return true;
-    return false;
-  };
+  const spherePath =
+    pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? "";
+  const graticulePath = pathGen({ type: "Feature", geometry: { type: "MultiLineString", coordinates: geoGraticule10() }, properties: {} } as never) ?? "";
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#f6e2e2]"><div className="relative h-full w-full">
-      <svg
-        ref={svgRef}
-        width={size.w}
-        height={size.h}
-        className="block cursor-grab active:cursor-grabbing"
-        onMouseMove={(e) => {
-          const rect = containerRef.current?.getBoundingClientRect();
-          if (rect) setCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-        }}
-        onClick={(e) => {
-          if (e.target === svgRef.current) onBackgroundClick?.();
-        }}
-      >
-        <g className="map-root">
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#f4f1ea]">
+      <div className="relative h-full w-full">
+        <svg
+          ref={svgRef}
+          width={size.w}
+          height={size.h}
+          className="block cursor-grab active:cursor-grabbing"
+          onMouseMove={(e) => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (rect) setCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          }}
+          onClick={(e) => {
+            if (e.target === svgRef.current) onBackgroundClick?.();
+          }}
+        >
           {/* ocean sphere */}
-          <path
-            d={pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? ""}
-            fill="#eccccc"
-          />
-          {/* countries — hover highlights light blue, click opens the country panel */}
+          <path d={spherePath} fill={CREAM} stroke={INK} strokeWidth={1} />
+          {/* graticule — the reference's signature wireframe */}
+          <path d={graticulePath} fill="none" stroke={INK_SOFT} strokeWidth={0.4} strokeOpacity={0.55} />
+          {/* countries: ink outlines, cream fill; hover/selected tint */}
           {countries.map((c, i) => {
             const name = c.properties?.name ?? "";
             const hovered = hoveredCountry === name;
             const selected = selectedCountry === name;
+            const d = pathGen(c as never);
+            if (!d) return null;
             return (
               <path
                 key={c.id ?? i}
-                d={pathGen(c as never) ?? ""}
-                fill={selected ? "#e8bfbf" : hovered ? "#ecc6c6" : "#f2dada"}
-                stroke={hovered || selected ? "#b91c1c" : "#e6c8c8"}
-                strokeWidth={hovered || selected ? 1 : 0.5}
+                d={d}
+                fill={selected ? "#e8c8c8" : hovered ? "#f0d5d5" : LAND}
+                stroke={hovered || selected ? RED : INK}
+                strokeWidth={hovered || selected ? 1 : 0.45}
+                strokeOpacity={hovered || selected ? 1 : 0.7}
                 className="cursor-pointer"
-                style={{ transition: "fill 150ms, stroke 150ms" }}
+                style={{ transition: "fill 150ms" }}
                 onMouseEnter={() => setHoveredCountry(name)}
                 onMouseLeave={() => setHoveredCountry(null)}
                 onClick={(e) => {
@@ -233,66 +238,64 @@ export default function WorldMap({
             );
           })}
 
-          {/* connection arcs */}
-          {links.map((l) => {
-            const hot = isLinkHighlighted(l.a.id, l.b.id);
-            return (
-              <path
-                key={l.id}
-                d={l.d}
-                fill="none"
-                stroke={hot ? "#b91c1c" : "#7f1d1d"}
-                strokeOpacity={hot ? 0.95 : 0.45}
-                strokeWidth={hot ? 2.2 : 1.1}
-                style={{ transition: "stroke 200ms, stroke-opacity 200ms" }}
-              />
-            );
-          })}
+          {/* connection arcs — only the selected person's ties */}
+          {arcs.map((a) => (
+            <path
+              key={a.id}
+              d={a.d}
+              fill="none"
+              stroke={RED}
+              strokeWidth={1.6}
+              strokeOpacity={0.9}
+            />
+          ))}
 
-          {/* person dots (de-overlapped positions) */}
+          {/* person dots — ink squares with a soft glow, red when selected */}
           {persons.map((p) => {
             const dp = posOf(p);
-            const pt = project(dp.lng, dp.lat);
+            if (!isVisible(dp.lng, dp.lat)) return null;
+            const pt = projection([dp.lng, dp.lat]) as [number, number] | null;
             if (!pt) return null;
             const selected = p.id === selectedId;
-            const highlighted = highlightIds?.has(p.id) ?? false;
-            const r = selected ? 8 : highlighted ? 6.5 : 5;
+            const highlighted = (highlightIds?.has(p.id) ?? false) || hoveredPerson === p.id;
+            const r = selected ? 6 : highlighted ? 5 : 4;
+            const color = selected ? RED : INK;
             return (
               <g
                 key={p.id}
                 transform={`translate(${pt[0]},${pt[1]})`}
                 className="cursor-pointer"
+                onMouseEnter={() => setHoveredPerson(p.id)}
+                onMouseLeave={() => setHoveredPerson(null)}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(p.id);
                 }}
               >
-                {/* corner brackets — ACP-style targeting marks */}
-                <path
-                  d={`M${-r - 6},${-r - 2} V${-r - 6} H${-r - 2} M${r + 2},${-r - 6} H${r + 6} V${-r - 2} M${r + 6},${r + 2} V${r + 6} H${r + 2} M${-r - 2},${r + 6} H${-r - 6} V${r + 2}`}
-                  fill="none"
-                  stroke={selected ? "#b91c1c" : "#1c1917"}
-                  strokeWidth={1.4}
-                  strokeOpacity={selected || highlighted ? 1 : 0.75}
+                {/* soft glow halo */}
+                <circle
+                  r={r + 7}
+                  fill={color}
+                  opacity={selected ? 0.28 : 0.14}
+                  style={{ filter: "blur(3px)" }}
                 />
-                {/* square marker */}
                 <rect
                   x={-r}
                   y={-r}
                   width={r * 2}
                   height={r * 2}
-                  fill={selected ? "#b91c1c" : highlighted ? "#7f1d1d" : "#1c1917"}
+                  fill={color}
                   style={{ transition: "all 150ms" }}
                 />
                 <text
-                  y={-r - 12}
+                  y={-r - 8}
                   textAnchor="middle"
-                  fill={selected ? "#b91c1c" : "#292524"}
+                  fill={selected ? RED : INK}
                   fontSize={selected ? 13 : 11}
                   fontWeight={selected ? 800 : 600}
                   style={{
                     paintOrder: "stroke",
-                    stroke: "#f6e2e2",
+                    stroke: CREAM,
                     strokeWidth: 3,
                     pointerEvents: "none",
                     userSelect: "none",
@@ -303,20 +306,19 @@ export default function WorldMap({
               </g>
             );
           })}
-        </g>
-      </svg>
+        </svg>
+      </div>
       {/* floating country name label follows the cursor */}
       {hoveredCountry && cursor && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-[#d9a3a3] bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#7f1d1d] shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-md border border-[#d6ccc0] bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#7f1d1d] shadow-lg"
           style={{ left: cursor.x + 14, top: cursor.y + 10 }}
         >
           {hoveredCountry}
         </div>
       )}
-      </div>
       {persons.length === 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-[#a87878]">
+        <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-stone-400">
           <p className="text-lg font-medium">This world is empty</p>
           <p className="mt-1 text-sm">
             Use the search bar below to add your first figure
