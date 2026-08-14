@@ -1,5 +1,7 @@
-import { X, MapPin, Users, Building2, Landmark, Keyboard } from "lucide-react";
+import { useState } from "react";
+import { X, MapPin, Users, Building2, Landmark, Keyboard, PieChart } from "lucide-react";
 import type { PersonDto } from "@contracts/types";
+import DemographicsTab from "./DemographicsTab";
 
 export type CountryPanelProps = {
   countryName: string;
@@ -210,6 +212,8 @@ export default function CountryPanel({
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
+  const isUS = /united states/i.test(countryName);
+  const [tab, setTab] = useState<"demographics" | "inputs">("demographics");
 
   return (
     <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-[#e3c4c4] bg-white/95 shadow-2xl backdrop-blur">
@@ -241,7 +245,24 @@ export default function CountryPanel({
       <div className="flex items-center gap-1 border-b border-[#e3c4c4] px-4 pt-3">
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-t-md border border-b-0 border-[#b91c1c]/40 bg-[#f9ecec] px-3 py-1.5 text-xs font-semibold text-[#b91c1c]"
+          onClick={() => setTab("demographics")}
+          className={`flex items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-semibold transition ${
+            tab === "demographics"
+              ? "border-[#b91c1c]/40 bg-[#f9ecec] text-[#b91c1c]"
+              : "border-transparent text-stone-500 hover:text-stone-900"
+          }`}
+        >
+          <PieChart size={13} />
+          Demographics
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("inputs")}
+          className={`flex items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-semibold transition ${
+            tab === "inputs"
+              ? "border-[#b91c1c]/40 bg-[#f9ecec] text-[#b91c1c]"
+              : "border-transparent text-stone-500 hover:text-stone-900"
+          }`}
         >
           <Keyboard size={13} />
           Personal Inputs
@@ -250,6 +271,17 @@ export default function CountryPanel({
 
       {/* body */}
       <div className="flex-1 space-y-6 overflow-y-auto p-4">
+        {tab === "demographics" ? (
+          isUS ? (
+            <DemographicsTab />
+          ) : (
+            <p className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4 text-xs italic text-stone-600">
+              Demographics data is currently available for the United States
+              only.
+            </p>
+          )
+        ) : (
+          <>
         {/* People */}
         <section className="space-y-3">
           <SectionHeader
@@ -304,6 +336,8 @@ export default function CountryPanel({
           />
           <EntityList items={parties} />
         </section>
+          </>
+        )}
       </div>
     </aside>
   );
