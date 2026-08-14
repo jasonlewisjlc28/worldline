@@ -163,11 +163,13 @@ export default function WorldMap({
     const out: { id: number; d: string }[] = [];
     for (const c of connections) {
       if (c.personAId !== selectedId && c.personBId !== selectedId) continue;
-      const a = personById.get(c.personAId);
-      const b = personById.get(c.personBId);
-      if (!a || !b) continue;
-      const pa = posOf(a);
-      const pb = posOf(b);
+      // Draw the arc STARTING at the selected person so the traveling light
+      // pulses outward from them toward their ties.
+      const from = personById.get(selectedId);
+      const other = personById.get(c.personAId === selectedId ? c.personBId : c.personAId);
+      if (!from || !other) continue;
+      const pa = posOf(from);
+      const pb = posOf(other);
       const sa = projection([pa.lng, pa.lat]);
       const sb = projection([pb.lng, pb.lat]);
       if (!sa || !sb) continue;
@@ -188,10 +190,8 @@ export default function WorldMap({
   // Smoothly rotate/zoom the globe to face a clicked country.
   const focusAnim = useRef<number | null>(null);
 
-  const focusCountry = (f: CountryFeature) => {
-    const [lng, lat] = geoCentroid(f as never);
+  const focusPoint = (lng: number, lat: number, targetK = 2.6) => {
     const targetRot: [number, number, number] = [-lng, -lat, 0];
-    const targetK = 2.6;
     const startRot = rotation;
     // shortest rotation path in longitude
     let dLng = targetRot[0] - startRot[0];
@@ -212,6 +212,11 @@ export default function WorldMap({
       if (u < 1) focusAnim.current = requestAnimationFrame(step);
     };
     focusAnim.current = requestAnimationFrame(step);
+  };
+
+  const focusCountry = (f: CountryFeature) => {
+    const [lng, lat] = geoCentroid(f as never);
+    focusPoint(lng, lat);
   };
 
   const spherePath =
@@ -272,14 +277,34 @@ export default function WorldMap({
 
           {/* connection arcs — only the selected person's ties */}
           {arcs.map((a) => (
-            <path
-              key={a.id}
-              d={a.d}
-              fill="none"
-              stroke={RED}
-              strokeWidth={1.6}
-              strokeOpacity={0.9}
-            />
+            <g key={a.id}>
+              <path
+                d={a.d}
+                fill="none"
+                stroke={RED}
+                strokeWidth={1.6}
+                strokeOpacity={0.9}
+              />
+              {/* white illuminating pulse traveling from the selected person
+                  along each tie to the people they're connected to */}
+              <path
+                d={a.d}
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeDasharray="14 260"
+                style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.95))" }}
+              >
+                <animate
+                  attributeName="stroke-dashoffset"
+                  from="274"
+                  to="0"
+                  dur="2.4s"
+                  repeatCount="indefinite"
+                />
+              </path>
+            </g>
           ))}
 
           {/* person dots — ink squares with a soft glow, red when selected */}
@@ -301,6 +326,7 @@ export default function WorldMap({
                 onMouseLeave={() => setHoveredPerson(null)}
                 onClick={(e) => {
                   e.stopPropagation();
+                  focusPoint(dp.lng, dp.lat, 3.4);
                   onSelect(p.id);
                 }}
               >
