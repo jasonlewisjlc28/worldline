@@ -170,6 +170,9 @@ export default function WorldMap({
       if (!from || !other) continue;
       const pa = posOf(from);
       const pb = posOf(other);
+      // Hide the arc when either endpoint sits behind the globe's horizon,
+      // matching how the square markers disappear on the far side.
+      if (!isVisible(pa.lng, pa.lat) || !isVisible(pb.lng, pb.lat)) continue;
       const sa = projection([pa.lng, pa.lat]);
       const sb = projection([pb.lng, pb.lat]);
       if (!sa || !sb) continue;
