@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { geoOrthographic, geoPath, geoGraticule10, geoDistance } from "d3-geo";
+import { geoOrthographic, geoPath, geoGraticule10, geoDistance, geoCentroid } from "d3-geo";
 import { drag } from "d3-drag";
 import { zoom as d3zoom } from "d3-zoom";
 import { select } from "d3-selection";
@@ -185,6 +185,35 @@ export default function WorldMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, connections, personById, projection, displayPos, size]);
 
+  // Smoothly rotate/zoom the globe to face a clicked country.
+  const focusAnim = useRef<number | null>(null);
+
+  const focusCountry = (f: CountryFeature) => {
+    const [lng, lat] = geoCentroid(f as never);
+    const targetRot: [number, number, number] = [-lng, -lat, 0];
+    const targetK = 2.6;
+    const startRot = rotation;
+    // shortest rotation path in longitude
+    let dLng = targetRot[0] - startRot[0];
+    dLng = ((dLng + 540) % 360) - 180;
+    const startK = globeK;
+    const t0 = performance.now();
+    const dur = 800;
+    if (focusAnim.current) cancelAnimationFrame(focusAnim.current);
+    const step = (t: number) => {
+      const u = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - u, 3); // easeOutCubic
+      setRotation([
+        startRot[0] + dLng * e,
+        startRot[1] + (targetRot[1] - startRot[1]) * e,
+        0,
+      ]);
+      setGlobeK(startK + (targetK - startK) * e);
+      if (u < 1) focusAnim.current = requestAnimationFrame(step);
+    };
+    focusAnim.current = requestAnimationFrame(step);
+  };
+
   const spherePath =
     pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? "";
   const graticulePath = pathGen({ type: "Feature", geometry: { type: "MultiLineString", coordinates: geoGraticule10() }, properties: {} } as never) ?? "";
@@ -230,7 +259,10 @@ export default function WorldMap({
                 onMouseLeave={() => setHoveredCountry(null)}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (name) onCountryClick?.(name);
+                  if (name) {
+                    focusCountry(c);
+                    onCountryClick?.(name);
+                  }
                 }}
               >
                 <title>{name}</title>
