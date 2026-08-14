@@ -1,4 +1,4 @@
-import { X, MapPin, Users, Building2, Landmark } from "lucide-react";
+import { X, MapPin, Users, Building2, Landmark, Keyboard } from "lucide-react";
 import type { PersonDto } from "@contracts/types";
 
 export type CountryPanelProps = {
@@ -235,6 +235,17 @@ export default function CountryPanel({
             <X size={18} />
           </button>
         </div>
+      </div>
+
+      {/* tabs */}
+      <div className="flex items-center gap-1 border-b border-[#e3c4c4] px-4 pt-3">
+        <button
+          type="button"
+          className="flex items-center gap-1.5 rounded-t-md border border-b-0 border-[#b91c1c]/40 bg-[#f9ecec] px-3 py-1.5 text-xs font-semibold text-[#b91c1c]"
+        >
+          <Keyboard size={13} />
+          Personal Inputs
+        </button>
       </div>
 
       {/* body */}
