@@ -212,7 +212,6 @@ export default function CountryPanel({
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
-  const isUS = /united states/i.test(countryName);
   const [tab, setTab] = useState<"demographics" | "inputs">("demographics");
 
   return (
@@ -272,14 +271,7 @@ export default function CountryPanel({
       {/* body */}
       <div className="flex-1 space-y-6 overflow-y-auto p-4">
         {tab === "demographics" ? (
-          isUS ? (
-            <DemographicsTab />
-          ) : (
-            <p className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4 text-xs italic text-stone-600">
-              Demographics data is currently available for the United States
-              only.
-            </p>
-          )
+          <DemographicsTab countryName={countryName} />
         ) : (
           <>
         {/* People */}

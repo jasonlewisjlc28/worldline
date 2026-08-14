@@ -1,47 +1,22 @@
-// U.S. demographics panel — built from official figures:
-//   Race/ethnicity: U.S. Census Bureau, Vintage 2024 population estimates
-//   Population/growth: U.S. Census Bureau 2024 estimates
-//   Age distribution: U.S. Census Bureau 2024 estimates
-//   Religion: Pew Research Center, 2023–24 Religious Landscape Study
-// All values are percentages of the total population.
+import { DEMOGRAPHICS, type DemoSlice } from "../data/demographics";
 
-type Slice = { label: string; pct: number; color: string };
-
-const RACE: Slice[] = [
-  { label: "White (non-Hispanic)", pct: 58.9, color: "#b91c1c" },
-  { label: "Hispanic / Latino", pct: 19.5, color: "#ea580c" },
-  { label: "Black (non-Hispanic)", pct: 12.4, color: "#292524" },
-  { label: "Asian (non-Hispanic)", pct: 6.1, color: "#ca8a04" },
-  { label: "Two or more races", pct: 1.9, color: "#78716c" },
-  { label: "American Indian / Alaska Native", pct: 1.1, color: "#4d7c0f" },
-  { label: "Native Hawaiian / Pacific Islander", pct: 0.2, color: "#0f766e" },
+// Palette assigned by slice index.
+const PALETTE = [
+  "#b91c1c",
+  "#ea580c",
+  "#292524",
+  "#ca8a04",
+  "#78716c",
+  "#4d7c0f",
+  "#0f766e",
+  "#a21caf",
+  "#0369a1",
+  "#d6caba",
 ];
 
-const POP_STATS = [
-  { label: "Population (2024)", value: "340.1M" },
-  { label: "Annual growth", value: "+0.98%" },
-  { label: "Median age", value: "39.1 yrs" },
-  { label: "Under 18", value: "21.5%" },
-];
-
-const AGE: Slice[] = [
-  { label: "Under 18", pct: 21.5, color: "#b91c1c" },
-  { label: "18 – 44", pct: 35.8, color: "#ea580c" },
-  { label: "45 – 64", pct: 24.5, color: "#ca8a04" },
-  { label: "65 and over", pct: 18.0, color: "#292524" },
-];
-
-const RELIGION: Slice[] = [
-  { label: "Protestant", pct: 40, color: "#b91c1c" },
-  { label: "Religiously unaffiliated", pct: 29, color: "#78716c" },
-  { label: "Catholic", pct: 19, color: "#ea580c" },
-  { label: "Other Christian", pct: 3, color: "#ca8a04" },
-  { label: "Jewish", pct: 2, color: "#4d7c0f" },
-  { label: "Muslim", pct: 1, color: "#0f766e" },
-  { label: "Buddhist", pct: 1, color: "#292524" },
-  { label: "Hindu", pct: 1, color: "#a21caf" },
-  { label: "Other religions", pct: 4, color: "#d6caba" },
-];
+function color(i: number) {
+  return PALETTE[i % PALETTE.length];
+}
 
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const a = ((angleDeg - 90) * Math.PI) / 180;
@@ -64,14 +39,14 @@ function donutSegment(
   return `M${x1},${y1} A${rOuter},${rOuter} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${rInner},${rInner} 0 ${large} 0 ${x4},${y4} Z`;
 }
 
-function Donut({ data }: { data: Slice[] }) {
-  const total = data.reduce((s, d) => s + d.pct, 0);
+function Donut({ data, center }: { data: DemoSlice[]; center: string }) {
+  const total = data.reduce((s, d) => s + d.pct, 0) || 1;
   let angle = 0;
   const cx = 90;
   const cy = 90;
   return (
     <svg viewBox="0 0 180 180" className="h-44 w-44 shrink-0">
-      {data.map((d) => {
+      {data.map((d, i) => {
         const start = angle;
         angle += (d.pct / total) * 360;
         const end = angle - 0.4; // hairline gap between slices
@@ -79,7 +54,7 @@ function Donut({ data }: { data: Slice[] }) {
           <path
             key={d.label}
             d={donutSegment(cx, cy, 88, 55, start, end)}
-            fill={d.color}
+            fill={color(i)}
           />
         );
       })}
@@ -91,16 +66,23 @@ function Donut({ data }: { data: Slice[] }) {
         fontSize="17"
         fontWeight="700"
       >
-        340.1M
+        {center}
       </text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" className="fill-stone-500">
+      <text
+        x={cx}
+        y={cy + 10}
+        textAnchor="middle"
+        fontSize="9"
+        className="fill-stone-500"
+      >
         residents
       </text>
     </svg>
   );
 }
 
-function BarRow({ label, pct, color }: Slice) {
+function BarRow({ label, pct, i }: DemoSlice & { i: number }) {
+  const width = Math.min(100, pct);
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between gap-2">
@@ -112,7 +94,7 @@ function BarRow({ label, pct, color }: Slice) {
       <div className="h-2 overflow-hidden rounded-full bg-[#efe3d3]">
         <div
           className="h-full rounded-full"
-          style={{ width: `${pct}%`, backgroundColor: color }}
+          style={{ width: `${width}%`, backgroundColor: color(i) }}
         />
       </div>
     </div>
@@ -127,7 +109,23 @@ function SubHead({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function DemographicsTab() {
+export default function DemographicsTab({ countryName }: { countryName: string }) {
+  const d = DEMOGRAPHICS[countryName];
+  if (!d) {
+    return (
+      <p className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4 text-xs italic text-stone-600">
+        Demographics data is not yet available for this territory.
+      </p>
+    );
+  }
+
+  const statCards = [
+    d.pop ? { label: "Population", value: d.pop } : null,
+    d.grow ? { label: "Annual growth", value: d.grow } : null,
+    d.u15 ? { label: "Under 15", value: d.u15 } : null,
+    d.o65 ? { label: "65 and over", value: d.o65 } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
+
   return (
     <div className="space-y-6">
       {/* Race & ethnicity */}
@@ -135,75 +133,78 @@ export default function DemographicsTab() {
         <SubHead>Race &amp; Ethnicity</SubHead>
         <div className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4">
           <div className="flex flex-col items-center gap-4">
-            <Donut data={RACE} />
+            <Donut data={d.ethnicity} center={d.pop ?? "—"} />
             <ul className="w-full space-y-1.5">
-              {RACE.map((d) => (
-                <li key={d.label} className="flex items-center gap-2 text-xs">
+              {d.ethnicity.map((s, i) => (
+                <li key={s.label} className="flex items-center gap-2 text-xs">
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: d.color }}
+                    style={{ backgroundColor: color(i) }}
                   />
-                  <span className="text-stone-700">{d.label}</span>
+                  <span className="text-stone-700">{s.label}</span>
                   <span className="ml-auto font-bold tabular-nums text-stone-900">
-                    {d.pct}%
+                    {s.pct}%
                   </span>
                 </li>
               ))}
             </ul>
           </div>
           <p className="mt-3 text-[10px] leading-relaxed text-stone-500">
-            Source: U.S. Census Bureau population estimates (Vintage 2024).
+            Source: national census / CIA World Factbook estimates.
           </p>
         </div>
       </section>
 
       {/* Population & growth */}
-      <section className="space-y-3">
-        <SubHead>Population &amp; Growth</SubHead>
-        <div className="grid grid-cols-2 gap-2">
-          {POP_STATS.map((s) => (
-            <div
-              key={s.label}
-              className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-3"
-            >
-              <p className="text-lg font-bold tabular-nums text-stone-900">
-                {s.value}
-              </p>
-              <p className="text-[10px] uppercase tracking-wide text-stone-500">
-                {s.label}
-              </p>
-            </div>
-          ))}
-        </div>
-        <p className="text-[10px] leading-relaxed text-stone-500">
-          The U.S. added roughly 3.3 million residents in 2024 — the fastest
-          annual growth since 2001 — driven mostly by net international
-          migration. Source: U.S. Census Bureau.
-        </p>
-      </section>
+      {statCards.length > 0 && (
+        <section className="space-y-3">
+          <SubHead>Population &amp; Growth</SubHead>
+          <div className="grid grid-cols-2 gap-2">
+            {statCards.map((s) => (
+              <div
+                key={s.label}
+                className="rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-3"
+              >
+                <p className="text-lg font-bold tabular-nums text-stone-900">
+                  {s.value}
+                </p>
+                <p className="text-[10px] uppercase tracking-wide text-stone-500">
+                  {s.label}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] leading-relaxed text-stone-500">
+            Source: World Bank, World Development Indicators (latest 2019–2024
+            estimate).
+          </p>
+        </section>
+      )}
 
       {/* Age distribution */}
-      <section className="space-y-3">
-        <SubHead>Age Distribution</SubHead>
-        <div className="space-y-3 rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4">
-          {AGE.map((d) => (
-            <BarRow key={d.label} {...d} />
-          ))}
-          <p className="pt-1 text-[10px] leading-relaxed text-stone-500">
-            Source: U.S. Census Bureau estimates (2024).
-          </p>
-        </div>
-      </section>
+      {d.age.length > 0 && (
+        <section className="space-y-3">
+          <SubHead>Age Distribution</SubHead>
+          <div className="space-y-3 rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4">
+            {d.age.map((s, i) => (
+              <BarRow key={s.label} {...s} i={i} />
+            ))}
+            <p className="pt-1 text-[10px] leading-relaxed text-stone-500">
+              Source: World Bank estimates.
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* Religion */}
       <section className="space-y-3">
         <SubHead>Religion</SubHead>
         <div className="space-y-3 rounded-lg border border-[#e3c4c4] bg-[#f9f4ec] p-4">
-          {RELIGION.map((d) => (
-            <BarRow key={d.label} {...d} />
+          {d.religion.map((s, i) => (
+            <BarRow key={s.label} {...s} i={i} />
           ))}
           <p className="pt-1 text-[10px] leading-relaxed text-stone-500">
-            Source: Pew Research Center, Religious Landscape Study (2023–24).
+            Source: Pew Research Center / national censuses.
           </p>
         </div>
       </section>
