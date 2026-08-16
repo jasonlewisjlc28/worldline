@@ -224,10 +224,12 @@ export default function PersonPanel({
 
 
 function alignmentLabel(overall: number): { text: string; color: string; barColor: string } {
-  if (overall >= 2.4) return { text: "Strongly Aligned", color: "text-emerald-700", barColor: "bg-emerald-600" };
-  if (overall >= 1.8) return { text: "Partially Aligned", color: "text-amber-700", barColor: "bg-amber-500" };
-  if (overall >= 1.0) return { text: "Divergent", color: "text-orange-700", barColor: "bg-orange-500" };
-  return { text: "Hostile", color: "text-red-700", barColor: "bg-red-500" };
+  if (overall >= 8) return { text: "Deeply Aligned", color: "text-emerald-700", barColor: "bg-emerald-600" };
+  if (overall >= 6) return { text: "Aligned", color: "text-lime-700", barColor: "bg-lime-600" };
+  if (overall >= 4.5) return { text: "Transactional", color: "text-amber-700", barColor: "bg-amber-500" };
+  if (overall >= 2.5) return { text: "Divergent", color: "text-orange-700", barColor: "bg-orange-500" };
+  if (overall >= 1) return { text: "Adversarial", color: "text-red-700", barColor: "bg-red-500" };
+  return { text: "At War", color: "text-red-900", barColor: "bg-red-800" };
 }
 
 const DIMENSION_LABELS: [keyof Pick<AlignmentDto, "strategic" | "financial" | "trust" | "ideological">, string, number][] = [
@@ -240,7 +242,7 @@ const DIMENSION_LABELS: [keyof Pick<AlignmentDto, "strategic" | "financial" | "t
 function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
   const [expanded, setExpanded] = useState(false);
   const label = alignmentLabel(alignment.overall);
-  const pct = Math.max(0, Math.min(100, (alignment.overall / 3) * 100));
+  const pct = Math.max(0, Math.min(100, (alignment.overall / 10) * 100));
   return (
     <div className="mt-2 rounded-md border border-[#e3c4c4] bg-[#f9ecec] p-2.5">
       <button
@@ -251,7 +253,10 @@ function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <span className={`text-[11px] font-bold ${label.color}`}>
-          {label.text} · {alignment.overall.toFixed(1)}/3
+          {label.text} · {alignment.overall.toFixed(1)}/10
+          {alignment.cap !== undefined && alignment.cap < 10 && (
+            <span className="ml-1 font-normal text-red-700">(capped)</span>
+          )}
         </span>
         <span className="text-[10px] text-stone-400">
           {expanded ? "hide breakdown ▲" : "breakdown ▼"}
@@ -268,7 +273,7 @@ function AlignmentGauge({ alignment }: { alignment: AlignmentDto }) {
                 <span className="font-semibold text-stone-700">
                   {name} <span className="font-normal text-stone-400">({weight}%)</span>
                 </span>
-                <span className="font-bold text-stone-800">{alignment[key]}/3</span>
+                <span className="font-bold text-stone-800">{alignment[key]}/10</span>
               </div>
               {alignment.reasons?.[key] && (
                 <p className="mt-0.5 text-[10px] leading-snug text-stone-400">

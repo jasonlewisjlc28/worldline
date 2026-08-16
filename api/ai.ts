@@ -266,13 +266,19 @@ Second-hand connections do NOT count: merely belonging to the same party, govern
 
 STEP 2 — If (and only if) a direct tie exists, write an intelligence-analyst-style assessment of their relationship. Cover as applicable: shared or conflicting strategic interests; ideological alignment; money flows between them; institutional history; personal rapport, patronage, rivalry or strain. Base everything on verifiable public record; use cautious language ("reportedly", "according to public reporting") for contested claims. 90-150 words.
 
-STEP 3 — Interest-alignment matrix. Score each dimension 0-3 based on the documented record:
-- strategic (geopolitical/strategic interests): 3 = same core objectives, 2 = partially overlapping, 1 = unrelated/indifferent, 0 = direct conflict.
-- financial (financial interdependence): 3 = deep mutual dependence, 2 = some shared financial interests, 1 = none, 0 = financially hostile (sanctions, asset seizures).
-- trust (personal loyalty/trust): 3 = proven patronage/loyalty, 2 = functional working relationship, 1 = distant, 0 = rivalry/betrayal.
-- ideological (ideological alignment): 3 = same doctrine/movement, 2 = broad sympathy, 1 = unrelated, 0 = opposed ideologies.
-For each dimension give a one-sentence justification ("reason") grounded in public record.
-Format when direct: {"direct": true, "strength": <integer 1-10 how strong/documented the direct tie is>, "summary": "...", "tags": "political, financial", "alignment": {"strategic": 0-3, "financial": 0-3, "trust": 0-3, "ideological": 0-3, "reasons": {"strategic": "...", "financial": "...", "trust": "...", "ideological": "..."}}} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
+STEP 3 — Interest-alignment matrix. Score each dimension 0-10 based on the documented record, weighting ACTIONS far above WORDS. Actions are: wars, proxy wars, military alliances, arms transfers, joint military exercises, sanctions imposed or circumvented, treaties signed and actually implemented, trade/energy flows, co-investment, debts, appointments, purges. Words are: speeches, communiqués, UN votes, mutual praise or condemnation. Rhetoric alone can never lift a dimension above 4. For each dimension give a one-sentence justification ("reason") that cites the ACTION behind the score, not what either side merely said.
+- strategic (geopolitical/strategic interests): 10 = acting jointly on core objectives (joint ops, binding alliance), 7-9 = materially supporting each other's goals (arms, bases, intelligence), 5-6 = partially overlapping, 3-4 = unrelated/indifferent, 0-2 = direct strategic conflict (sanctions, proxy confrontation, active war).
+- financial (financial interdependence): 10 = deep mutual dependence (major trade/energy/investment flows, co-ownership), 7-9 = significant, 5-6 = some shared financial interests, 3-4 = negligible, 0-2 = financial warfare (sanctions, asset freezes, blockades).
+- trust (personal loyalty/trust): 10 = proven patronage/loyalty through purges or crises, 7-9 = durable alliance repeatedly acted on, 5-6 = functional working relationship, 3-4 = distant, 0-2 = rivalry, betrayal, or targeting each other.
+- ideological (ideological alignment): 10 = same doctrine/movement with joint ideological projects, 7-9 = broad sympathy, 4-6 = unrelated, 0-3 = opposed ideologies actively promoted against each other.
+
+STEP 3b — Adversary caps. After scoring, also output a "cap" on the overall score if any applies:
+- 2 if the two people's states/forces are in active war or armed conflict with each other;
+- 4 if they directly impose sanctions on each other or fight a documented proxy war;
+- 5 if there are public threats, expelled diplomats, or severed relations between them;
+- 10 otherwise (no cap).
+No shared interest can exceed these caps: a pair at war never ranks above 2 no matter what else is true.
+Format when direct: {"direct": true, "strength": <integer 1-10 how strong/documented the direct tie is>, "summary": "...", "tags": "political, financial", "alignment": {"strategic": 0-10, "financial": 0-10, "trust": 0-10, "ideological": 0-10, "cap": 2|4|5|10, "reasons": {"strategic": "...", "financial": "...", "trust": "...", "ideological": "..."}}} — tags: 1-3 comma-separated lowercase categories from: political, financial, ideological, familial, institutional, diplomatic.`;
 
 /** Minimum directness score (1-10) for a tie to be created at all. */
 const DIRECTNESS_THRESHOLD = 5;
@@ -286,13 +292,22 @@ export type Alignment = {
   trust: number;
   ideological: number;
   overall: number;
+  cap: number;
   reasons: { strategic: string; financial: string; trust: string; ideological: string };
 };
 
 function clampScore(v: unknown): number {
   const n = Number(v);
-  if (!Number.isFinite(n)) return 1;
-  return Math.max(0, Math.min(3, Math.round(n)));
+  if (!Number.isFinite(n)) return 3;
+  return Math.max(0, Math.min(10, Math.round(n * 10) / 10));
+}
+
+function clampCap(v: unknown): number {
+  const n = Number(v);
+  if (n <= 2) return 2;
+  if (n <= 4) return 4;
+  if (n <= 5) return 5;
+  return 10;
 }
 
 function buildAlignment(raw: unknown): Alignment | null {
@@ -303,19 +318,25 @@ function buildAlignment(raw: unknown): Alignment | null {
   const financial = clampScore(a.financial);
   const trust = clampScore(a.trust);
   const ideological = clampScore(a.ideological);
-  const overall =
+  const cap = clampCap(a.cap);
+  // Adversary caps are enforced deterministically here, so rhetoric in the
+  // model's answer can never push a warring or sanctioned pair above its cap.
+  const overall = Math.min(
+    cap,
     Math.round(
       (strategic * ALIGNMENT_WEIGHTS.strategic +
         financial * ALIGNMENT_WEIGHTS.financial +
         trust * ALIGNMENT_WEIGHTS.trust +
         ideological * ALIGNMENT_WEIGHTS.ideological) * 100
-    ) / 100;
+    ) / 100
+  );
   return {
     strategic,
     financial,
     trust,
     ideological,
     overall,
+    cap,
     reasons: {
       strategic: String(reasons.strategic ?? ""),
       financial: String(reasons.financial ?? ""),

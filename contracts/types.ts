@@ -44,6 +44,7 @@ export type AlignmentDto = {
   trust: number;
   ideological: number;
   overall: number;
+  cap?: number;
   reasons: { strategic: string; financial: string; trust: string; ideological: string };
 };
 
