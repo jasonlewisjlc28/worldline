@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { X, MapPin, Users, Building2, Landmark, Keyboard, PieChart } from "lucide-react";
+import { X, MapPin, Users, Building2, Landmark, Keyboard, PieChart, Coins } from "lucide-react";
 import type { PersonDto } from "@contracts/types";
 import DemographicsTab from "./DemographicsTab";
+import EconomicsTab from "./EconomicsTab";
 
 export type CountryPanelProps = {
   countryName: string;
@@ -212,7 +213,7 @@ export default function CountryPanel({
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
-  const [tab, setTab] = useState<"demographics" | "inputs">("demographics");
+  const [tab, setTab] = useState<"demographics" | "economics" | "inputs">("demographics");
 
   return (
     <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-[#e3c4c4] bg-white/95 shadow-2xl backdrop-blur">
@@ -256,6 +257,18 @@ export default function CountryPanel({
         </button>
         <button
           type="button"
+          onClick={() => setTab("economics")}
+          className={`flex items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-semibold transition ${
+            tab === "economics"
+              ? "border-[#b91c1c]/40 bg-[#f9ecec] text-[#b91c1c]"
+              : "border-transparent text-stone-500 hover:text-stone-900"
+          }`}
+        >
+          <Coins size={13} />
+          Economics
+        </button>
+        <button
+          type="button"
           onClick={() => setTab("inputs")}
           className={`flex items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-semibold transition ${
             tab === "inputs"
@@ -272,6 +285,8 @@ export default function CountryPanel({
       <div className="flex-1 space-y-6 overflow-y-auto p-4">
         {tab === "demographics" ? (
           <DemographicsTab countryName={countryName} />
+        ) : tab === "economics" ? (
+          <EconomicsTab countryName={countryName} />
         ) : (
           <>
         {/* People */}
