@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { ECONOMICS } from "../data/economics";
+import ResourcesTab from "./ResourcesTab";
 import {
   ArrowLeftRight,
   Briefcase,
   Scale,
   Coins,
   Tractor,
+  Leaf,
 } from "lucide-react";
 
 const PALETTE = ["#b91c1c", "#ea580c", "#292524", "#ca8a04", "#78716c", "#0f766e"];
 const color = (i: number) => PALETTE[i % PALETTE.length];
 
-type Sub = "trade" | "labor" | "debt" | "currency" | "land";
+type Sub = "trade" | "labor" | "debt" | "currency" | "land" | "resources";
 
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "trade", label: "Imports & Exports", icon: <ArrowLeftRight size={12} /> },
@@ -19,6 +21,7 @@ const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "debt", label: "Balance of Payments", icon: <Scale size={12} /> },
   { id: "currency", label: "Currency", icon: <Coins size={12} /> },
   { id: "land", label: "Land Ownership", icon: <Tractor size={12} /> },
+  { id: "resources", label: "Resources", icon: <Leaf size={12} /> },
 ];
 
 function SubHead({ children }: { children: React.ReactNode }) {
@@ -317,7 +320,7 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
             <Missing />
           )}
         </div>
-      ) : (
+      ) : sub === "land" ? (
         <div className="space-y-4">
           {e.land ? (
             <Card>
@@ -334,6 +337,8 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
             <Missing />
           )}
         </div>
+      ) : (
+        <ResourcesTab countryName={countryName} />
       )}
     </div>
   );
