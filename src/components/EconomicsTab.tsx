@@ -72,6 +72,54 @@ function Missing() {
   );
 }
 
+function DebtList({
+  title,
+  items,
+  kind,
+}: {
+  title: string;
+  items:
+    | { creditor: string; share: string; note: string }[]
+    | { debtor: string; note: string }[];
+  kind: "owes" | "owed";
+}) {
+  return (
+    <Card>
+      <SubHead>{title}</SubHead>
+      <ul className="mt-3 space-y-2">
+        {items.map((it, i) => {
+          const name =
+            kind === "owes"
+              ? (it as { creditor: string }).creditor
+              : (it as { debtor: string }).debtor;
+          const share =
+            kind === "owes" ? (it as { share?: string }).share : undefined;
+          return (
+            <li
+              key={name + i}
+              className="rounded-md border border-[#e3c4c4] bg-white p-2.5"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-stone-900">
+                  {name}
+                </span>
+                {share && (
+                  <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#b91c1c]">
+                    {share}
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-[11px] leading-snug text-stone-500">
+                {it.note}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
 export default function EconomicsTab({ countryName }: { countryName: string }) {
   const [sub, setSub] = useState<Sub>("trade");
   const e = ECONOMICS[countryName];
@@ -214,6 +262,33 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
           ) : (
             <Missing />
           )}
+          {e.owesTo && e.owesTo.length > 0 && (
+            <DebtList
+              title="Who this country owes (creditors)"
+              items={e.owesTo}
+              kind="owes"
+            />
+          )}
+          {e.owedTo && e.owedTo.length > 0 && (
+            <DebtList
+              title="Who owes this country (debtors)"
+              items={e.owedTo}
+              kind="owed"
+            />
+          )}
+          {!e.owesTo && !e.owedTo && (
+            <Card>
+              <p className="text-xs italic text-stone-600">
+                Bilateral debt breakdown not yet documented for this country.
+              </p>
+            </Card>
+          )}
+          <p className="text-[10px] leading-relaxed text-stone-500">
+            Breakdown sources: World Bank International Debt Statistics,
+            AidData Chinese debt database, Paris Club records, IMF program
+            documents, national debt offices. Figures are approximate
+            outstanding amounts, latest documented.
+          </p>
         </div>
       ) : sub === "currency" ? (
         <div className="space-y-4">
