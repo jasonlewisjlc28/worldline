@@ -1,16 +1,15 @@
 import { useMemo, useState } from "react";
 import { geoOrthographic, geoGraticule10, geoPath, geoCentroid, geoDistance } from "d3-geo";
-import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat, CircleDot } from "lucide-react";
+import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
 import topoData from "../../public/countries-110m.json";
 import * as topojson from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 
-type Sub = "production" | "energy" | "flows";
+type Sub = "production" | "energy";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "production", label: "Resources & Production", icon: <Mountain size={12} /> },
   { id: "energy", label: "Energy Mix", icon: <Zap size={12} /> },
-  { id: "flows", label: "Trade Flows", icon: <CircleDot size={12} /> },
 ];
 
 const PALETTE = ["#b91c1c", "#ea580c", "#292524", "#ca8a04", "#78716c", "#0f766e", "#4d7c0f", "#0369a1"];
@@ -173,6 +172,11 @@ function FlowGlobe({ countryName }: { countryName: string }) {
   );
 }
 
+// Export the flow globe so the Imports & Exports sub-tab can embed it.
+export function ResourceFlowGlobe({ countryName }: { countryName: string }) {
+  return <FlowGlobe countryName={countryName} />;
+}
+
 // ---------------------------------------------------------------- main tab
 export default function ResourcesTab({ countryName }: { countryName: string }) {
   const [sub, setSub] = useState<Sub>("production");
@@ -329,14 +333,7 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
             </Card>
           )}
         </div>
-      ) : (
-        <Card>
-          <SubHead>Bilateral resource flows</SubHead>
-          <div className="mt-3">
-            <FlowGlobe countryName={countryName} />
-          </div>
-        </Card>
-      )}
+      ) : null}
     </div>
   );
 }
