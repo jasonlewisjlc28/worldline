@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
 
-type Sub = "production" | "energy";
+type Sub = "production" | "food" | "energy";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "production", label: "Resources & Production", icon: <Mountain size={12} /> },
+  { id: "food", label: "Food & Agriculture", icon: <Wheat size={12} /> },
   { id: "energy", label: "Energy Mix", icon: <Zap size={12} /> },
 ];
 
@@ -46,6 +47,45 @@ function Missing() {
     <Card>
       <p className="text-xs italic text-stone-600">Data not available for this territory.</p>
     </Card>
+  );
+}
+
+// donut pie chart (same style as Demographics)
+function polar(cx: number, cy: number, r: number, angle: number) {
+  const rad = ((angle - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+function donutSegment(cx: number, cy: number, r0: number, r1: number, a0: number, a1: number) {
+  const [x0, y0] = polar(cx, cy, r1, a0);
+  const [x1, y1] = polar(cx, cy, r1, a1);
+  const [x2, y2] = polar(cx, cy, r0, a1);
+  const [x3, y3] = polar(cx, cy, r0, a0);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M ${x0} ${y0} A ${r1} ${r1} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${r0} ${r0} 0 ${large} 0 ${x3} ${y3} Z`;
+}
+function Donut({ data }: { data: { label: string; pct: number }[] }) {
+  let a = 0;
+  const segs = data.map((d, i) => {
+    const span = (d.pct / 100) * 360;
+    const path = donutSegment(100, 100, 58, 96, a, a + span);
+    a += span;
+    return <path key={i} d={path} fill={color(i)} stroke="#f9f4ec" strokeWidth={1} />;
+  });
+  return (
+    <div className="flex flex-col items-center gap-4 sm:flex-row">
+      <svg viewBox="0 0 200 200" className="h-44 w-44 shrink-0">{segs}</svg>
+      <ul className="w-full space-y-1.5">
+        {data.map((d, i) => (
+          <li key={i} className="flex items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 text-stone-700">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color(i) }} />
+              {d.label}
+            </span>
+            <span className="font-bold tabular-nums text-stone-900">{d.pct}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -133,18 +173,14 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
             </Card>
           )}
 
-          {/* trade exposure + food */}
-          {(r.fuel_exp != null || r.agri_exp != null) && (
+          {/* trade exposure */}
+          {(r.fuel_exp != null || r.ore_exp != null) && (
             <Card>
-              <SubHead>
-                <span className="inline-flex items-center gap-1"><Wheat size={12} /> Food &amp; trade exposure</span>
-              </SubHead>
+              <SubHead>Commodity trade exposure</SubHead>
               <div className="mt-3 space-y-3">
                 {r.fuel_exp != null && <Bar label="Fuel share of exports" pct={r.fuel_exp} i={0} />}
                 {r.ore_exp != null && <Bar label="Ores & metals share of exports" pct={r.ore_exp} i={3} />}
-                {r.agri_exp != null && <Bar label="Food & ag share of exports" pct={r.agri_exp} i={1} />}
                 {r.fuel_imp != null && <Bar label="Fuel share of imports" pct={r.fuel_imp} i={2} />}
-                {r.agri_imp != null && <Bar label="Food share of imports" pct={r.agri_imp} i={5} />}
               </div>
               <Source>World Bank / UN Comtrade merchandise-trade shares (latest).</Source>
             </Card>
@@ -174,6 +210,54 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
                 </p>
               </div>
               <Source>World Bank / FAO AQUASTAT (latest).</Source>
+            </Card>
+          )}
+        </div>
+      ) : sub === "food" ? (
+        <div className="space-y-4">
+          {/* agricultural output pie */}
+          {r.foodOutput && r.foodOutput.length > 0 ? (
+            <Card>
+              <SubHead>Agricultural output</SubHead>
+              <div className="mt-3">
+                <Donut data={r.foodOutput} />
+              </div>
+              <Source>Approximate share of agricultural output value — FAOSTAT / national statistics (latest available).</Source>
+            </Card>
+          ) : (
+            <Missing />
+          )}
+
+          {/* food balance */}
+          {(r.agri_exp != null || r.agri_imp != null) && (
+            <Card>
+              <SubHead>
+                <span className="inline-flex items-center gap-1"><Wheat size={12} /> Food balance</span>
+              </SubHead>
+              <div className="mt-3 space-y-3">
+                {r.agri_exp != null && <Bar label="Food & agriculture going out (share of exports)" pct={r.agri_exp} i={1} />}
+                {r.agri_imp != null && <Bar label="Food coming in (share of imports)" pct={r.agri_imp} i={5} />}
+              </div>
+              {r.agri_exp != null && r.agri_imp != null && (
+                <p className="mt-3 rounded-md border border-[#e3c4c4] bg-white p-2.5 text-[11px] leading-relaxed text-stone-700">
+                  {r.agri_exp >= r.agri_imp ? (
+                    <>
+                      <span className="font-bold text-green-700">Net food exporter.</span> Food and agricultural goods
+                      make up <span className="font-semibold">{r.agri_exp}%</span> of merchandise exports versus{" "}
+                      <span className="font-semibold">{r.agri_imp}%</span> of imports — the country sells more food
+                      abroad than it buys.
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-bold text-red-700">Net food importer.</span> Food makes up{" "}
+                      <span className="font-semibold">{r.agri_imp}%</span> of merchandise imports versus{" "}
+                      <span className="font-semibold">{r.agri_exp}%</span> of exports — the country relies on
+                      foreign supply for part of its food needs.
+                    </>
+                  )}
+                </p>
+              )}
+              <Source>World Bank / UN Comtrade merchandise-trade shares (latest available year).</Source>
             </Card>
           )}
         </div>
