@@ -146,19 +146,20 @@ function TradePie({
   arrow: string;
 }) {
   // merge refined + crude petroleum into a single "Petroleum" slice
-  const merged: Record<string, { pct: number; partners: string[] }> = {};
+  const merged: Record<string, { pct: number; partners: Set<string> }> = {};
   for (const it of items) {
     const pct = parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0;
     const isPetro = /crude|refined|petroleum/i.test(it.good);
     const label = isPetro ? "Petroleum (crude & refined)" : it.good;
-    if (!merged[label]) merged[label] = { pct: 0, partners: [] };
+    if (!merged[label]) merged[label] = { pct: 0, partners: new Set() };
     merged[label].pct += pct;
-    if (it.partners) merged[label].partners.push(it.partners);
+    for (const p of it.partners.split(",").map((x) => x.trim()).filter(Boolean))
+      merged[label].partners.add(p);
   }
   const data = Object.entries(merged).map(([label, v]) => ({
     label,
     pct: Math.round(v.pct * 10) / 10,
-    partners: v.partners.join("; "),
+    partners: [...v.partners].slice(0, 3).join(", ") + (v.partners.size > 3 ? ", …" : ""),
   }));
   const listed = data.reduce((a, d) => a + d.pct, 0);
   const other = Math.max(0, Math.round((100 - listed) * 10) / 10);
@@ -176,9 +177,9 @@ function TradePie({
       <p className="text-[11px] font-bold uppercase tracking-wide text-stone-700">
         {title}
       </p>
-      <div className="mt-3 flex flex-col items-center gap-3 sm:flex-row">
-        <svg viewBox="0 0 200 200" className="h-28 w-28 shrink-0">{segs}</svg>
-        <ul className="w-full min-w-0 space-y-1.5">
+      <div className="mt-3 flex items-start gap-3">
+        <svg viewBox="0 0 200 200" className="h-24 w-24 shrink-0">{segs}</svg>
+        <ul className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
           {slices.map((d, i) => (
             <li key={i} className="text-xs">
               <div className="flex items-baseline justify-between gap-2">
