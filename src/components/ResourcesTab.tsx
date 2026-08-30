@@ -6,7 +6,7 @@ type Sub = "production" | "food" | "energy";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "production", label: "Resources & Production", icon: <Mountain size={12} /> },
   { id: "food", label: "Food & Agriculture", icon: <Wheat size={12} /> },
-  { id: "energy", label: "Energy Mix", icon: <Zap size={12} /> },
+  { id: "energy", label: "Electricity & Fuel", icon: <Zap size={12} /> },
 ];
 
 const PALETTE = ["#b91c1c", "#ea580c", "#292524", "#ca8a04", "#78716c", "#0f766e", "#4d7c0f", "#0369a1"];
@@ -279,7 +279,7 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
           )}
           {r.elec_fossil != null ? (
             <Card>
-              <SubHead>Electricity &amp; Fuel</SubHead>
+              <SubHead>Electricity generation mix</SubHead>
               <div className="mt-3 space-y-3">
                 <Bar label="Fossil fuels" pct={r.elec_fossil} i={2} />
                 {r.elec_hydro != null && <Bar label="Hydro" pct={r.elec_hydro} i={5} />}
