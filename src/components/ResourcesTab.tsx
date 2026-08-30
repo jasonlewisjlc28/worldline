@@ -179,6 +179,39 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
         </div>
       ) : sub === "energy" ? (
         <div className="space-y-4">
+          {r.energyProd != null && r.energyCons != null && (
+            <Card>
+              <SubHead>Energy balance</SubHead>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-[#e3c4c4]">
+                      <th className="pb-1.5 pr-3 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Total Production (Quad BTU)</th>
+                      <th className="pb-1.5 pr-3 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Total Consumption (Quad BTU)</th>
+                      <th className="pb-1.5 pr-3 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Net Energy Gap</th>
+                      <th className="pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Per Capita Cons. (M BTU)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="py-2 pr-3 text-sm font-bold tabular-nums text-stone-900">{r.energyProd}</td>
+                      <td className="py-2 pr-3 text-sm font-bold tabular-nums text-stone-900">{r.energyCons}</td>
+                      <td className="py-2 pr-3">
+                        <span className="inline-flex items-center gap-1.5 text-sm font-bold tabular-nums">
+                          <span className={`inline-block h-2 w-2 rounded-full ${r.energyGap != null && r.energyGap >= 0 ? "bg-green-600" : "bg-red-600"}`} />
+                          <span className={r.energyGap != null && r.energyGap >= 0 ? "text-green-700" : "text-red-700"}>
+                            {r.energyGap != null && r.energyGap >= 0 ? "+" : ""}{r.energyGap} {r.energyGap != null && r.energyGap >= 0 ? "Surplus" : "Deficit"}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="py-2 text-sm font-bold tabular-nums text-stone-900">{r.energyPc ?? "—"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <Source>Source: EIA primary energy estimates (2023).</Source>
+            </Card>
+          )}
           {r.elec_fossil != null ? (
             <Card>
               <SubHead>Electricity generation mix</SubHead>
