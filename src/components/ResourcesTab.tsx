@@ -144,6 +144,12 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
                 <span className="inline-flex items-center gap-1"><Gem size={12} /> Minerals &amp; <TreePine size={12} className="ml-1" /> Timber</span>
               </SubHead>
               {r.minerals && <p className="mt-2 text-[11px] leading-relaxed text-stone-600"><span className="font-semibold text-stone-800">Minerals:</span> {r.minerals}</p>}
+              {r.mineralsChart && r.mineralsChart.length > 0 && (
+                <div className="mt-3">
+                  <Donut data={r.mineralsChart} />
+                  <p className="pt-2 text-[10px] leading-relaxed text-stone-500">Approximate share of mining output value — USGS / national mining statistics (latest available).</p>
+                </div>
+              )}
               {r.timber && <p className="mt-1.5 text-[11px] leading-relaxed text-stone-600"><span className="font-semibold text-stone-800">Timber:</span> {r.timber}</p>}
               {r.forest != null && (
                 <p className="mt-1.5 text-[11px] text-stone-600">
