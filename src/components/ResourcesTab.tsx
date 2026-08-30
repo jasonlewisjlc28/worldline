@@ -122,25 +122,6 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
         <Missing />
       ) : sub === "production" ? (
         <div className="space-y-4">
-          {/* fossil production stats */}
-          <Card>
-            <SubHead>
-              <span className="inline-flex items-center gap-1"><Flame size={12} /> Oil, Gas &amp; Coal production</span>
-            </SubHead>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <Stat label="Crude oil, kb/d" value={r.oil != null ? r.oil.toLocaleString() : "—"} />
-              <Stat label="Natural gas, bcm/yr" value={r.gas != null ? r.gas.toLocaleString() : "—"} />
-              <Stat label="Coal, Mt/yr" value={r.coal != null ? r.coal.toLocaleString() : "—"} />
-            </div>
-            {r.oilNote && <p className="mt-2 text-[11px] leading-relaxed text-stone-600">{r.oilNote}</p>}
-            {r.reserves && (
-              <p className="mt-2 text-[11px] leading-relaxed text-stone-600">
-                <span className="font-semibold text-stone-800">Reserves &amp; strategic notes:</span> {r.reserves}
-              </p>
-            )}
-            <Source>Sources: EIA, OPEC, BP Statistical Review (latest year documented).</Source>
-          </Card>
-
           {/* resource rents */}
           {(r.oil_rents != null || r.gas_rents != null || r.coal_rents != null || r.min_rents != null) && (
             <Card>
@@ -298,7 +279,7 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
           )}
           {r.elec_fossil != null ? (
             <Card>
-              <SubHead>Electricity generation mix</SubHead>
+              <SubHead>Electricity &amp; Fuel</SubHead>
               <div className="mt-3 space-y-3">
                 <Bar label="Fossil fuels" pct={r.elec_fossil} i={2} />
                 {r.elec_hydro != null && <Bar label="Hydro" pct={r.elec_hydro} i={5} />}
@@ -309,6 +290,25 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
             </Card>
           ) : (
             <Missing />
+          )}
+          {(r.oil != null || r.gas != null || r.coal != null) && (
+            <Card>
+              <SubHead>
+                <span className="inline-flex items-center gap-1"><Flame size={12} /> Oil, Gas &amp; Coal production</span>
+              </SubHead>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Stat label="Crude oil, kb/d" value={r.oil != null ? r.oil.toLocaleString() : "—"} />
+                <Stat label="Natural gas, bcm/yr" value={r.gas != null ? r.gas.toLocaleString() : "—"} />
+                <Stat label="Coal, Mt/yr" value={r.coal != null ? r.coal.toLocaleString() : "—"} />
+              </div>
+              {r.oilNote && <p className="mt-2 text-[11px] leading-relaxed text-stone-600">{r.oilNote}</p>}
+              {r.reserves && (
+                <p className="mt-2 text-[11px] leading-relaxed text-stone-600">
+                  <span className="font-semibold text-stone-800">Reserves &amp; strategic notes:</span> {r.reserves}
+                </p>
+              )}
+              <Source>Sources: EIA, OPEC, BP Statistical Review (latest year documented).</Source>
+            </Card>
           )}
           {(r.fuel_exp != null || r.fuel_imp != null || r.fuelOut || r.fuelIn) && (
             <Card>
