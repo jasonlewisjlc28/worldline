@@ -177,15 +177,15 @@ function TradePie({
       <p className="text-[11px] font-bold uppercase tracking-wide text-stone-700">
         {title}
       </p>
-      <div className="mt-3 flex items-start gap-3">
-        <svg viewBox="0 0 200 200" className="h-24 w-24 shrink-0">{segs}</svg>
-        <ul className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
+      <div className="mt-3 flex flex-col items-center gap-3">
+        <svg viewBox="0 0 200 200" className="h-36 w-36 shrink-0">{segs}</svg>
+        <ul className="w-full space-y-1.5">
           {slices.map((d, i) => (
             <li key={i} className="text-xs">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-snug text-stone-700">
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] leading-snug text-stone-700">
                   <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color(i) }} />
-                  {d.label}
+                  <span className="break-words">{d.label}</span>
                 </span>
                 <span className="shrink-0 font-bold tabular-nums text-stone-900">{d.pct}%</span>
               </div>
