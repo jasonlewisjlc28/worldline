@@ -147,12 +147,14 @@ function TradePie({
 }) {
   // recategorize into broad trade categories
   const CATS: [string, RegExp][] = [
-    ["Machinery & Electronics", /machin|electronic|computer|semiconductor|integrated circuit|telecom|equipment|appliance|electrical|instrument/i],
+    ["Machinery & Electronics", /watch|machin|electronic|computer|semiconductor|integrated circuit|telecom|equipment|appliance|electrical|instrument|weapon|defen[cs]e|arms|military/i],
     ["Transportation & Vehicles", /\bcar|vehicle|truck|aircraft|aero|ship|boat|auto|train|rail/i],
     ["Energy & Mineral Fuels", /crude|refined|petroleum|oil|gas|lng|coal|fuel|electricit|uranium|energy/i],
-    ["Chemicals & Plastics", /chem|pharma|medic|plastic|fertiliz|cosmetic|rubber|ammonia/i],
-    ["Agriculture & Foodstuffs", /food|wheat|grain|corn|rice|meat|fish|fruit|vegetable|dairy|beverage|wine|coffee|tea|cocoa|sugar|soy|palm|livestock|agri|tobacco|date|cereal|animal/i],
-    ["Metals & Textiles", /steel|iron|copper|alumin|metal|ore|mineral|gold|silver|textile|cloth|fabric|apparel|footwear|cotton|zinc|nickel/i],
+    ["Chemicals & Plastics", /cement|phosphate|chem|pharma|medic|plastic|fertiliz|cosmetic|rubber|ammonia/i],
+    ["Agriculture & Foodstuffs", /food|citrus|cotton|wheat|grain|corn|rice|meat|fish|fruit|vegetable|dairy|beverage|wine|coffee|tea|cocoa|sugar|soy|palm|livestock|agri|tobacco|date|cereal|animal|banana|cashew|sesame|flower|gum arabic|cigar|coconut|cassava|khat|mango|pineapple|shrimp|produce|beef|brandy|alcohol|water/i],
+    ["Metals & Minerals", /steel|iron|copper|alumin|metal|ore|mineral|gold|silver|zinc|nickel|lithium|cobalt|coltan|titanium|bauxite|potash|salt|manganese|ferroalloy|diamond|gem|jewel|jade|emerald|platinum|chrome|chromite|tungsten|rare earth|graphite/i],
+    ["Wood & Forestry Products", /timber|wood|lumber|pulp|paper|mahogany|okoumé|forestr/i],
+    ["Furniture, Textiles & Manufactures", /furnitur|textile|cloth|fabric|apparel|footwear|garment|cashmere|leather|fashion|tire|bicycle|wiring|harness|toy/i],
   ];
   const merged: Record<string, { pct: number; partners: Set<string> }> = {};
   for (const it of items) {
