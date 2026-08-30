@@ -138,42 +138,14 @@ function donutSegment(cx: number, cy: number, r0: number, r1: number, a0: number
 
 function TradePie({
   title,
-  items,
+  mix,
   arrow,
 }: {
   title: string;
-  items: { good: string; pct: string; partners: string }[];
+  mix: { label: string; pct: number }[];
   arrow: string;
 }) {
-  // recategorize into broad trade categories
-  const CATS: [string, RegExp][] = [
-    ["Machinery & Electronics", /watch|machin|electronic|computer|semiconductor|integrated circuit|telecom|equipment|appliance|electrical|instrument|weapon|defen[cs]e|arms|military/i],
-    ["Transportation & Vehicles", /\bcar|vehicle|truck|aircraft|aero|ship|boat|auto|train|rail/i],
-    ["Energy & Mineral Fuels", /crude|refined|petroleum|oil|gas|lng|coal|fuel|electricit|uranium|energy/i],
-    ["Chemicals & Plastics", /cement|phosphate|chem|pharma|medic|plastic|fertiliz|cosmetic|rubber|ammonia/i],
-    ["Agriculture & Foodstuffs", /food|citrus|cotton|wheat|grain|corn|rice|meat|fish|fruit|vegetable|dairy|beverage|wine|coffee|tea|cocoa|sugar|soy|palm|livestock|agri|tobacco|date|cereal|animal|banana|cashew|sesame|flower|gum arabic|cigar|coconut|cassava|khat|mango|pineapple|shrimp|produce|beef|brandy|alcohol|water/i],
-    ["Metals & Minerals", /\bsteel\b|\biron\b|\bcopper|alumin|\bmetal|\bore\b|\bmineral|\bgold\b|\bsilver\b|\bzinc\b|\bnickel|\blithium|\bcobalt|coltan|titanium|\bbauxite|\bpotash|\bsalt\b|manganese|ferroalloy|diamond|\bgem|jewel|\bjade\b|emerald|platinum|\bchrome\b|chromite|tungsten|rare earth|graphite/i],
-    ["Wood & Forestry Products", /timber|wood|lumber|pulp|paper|mahogany|okoumé|forestr/i],
-    ["Furniture, Textiles & Manufactures", /furnitur|textile|cloth|fabric|apparel|footwear|garment|cashmere|leather|fashion|tire|bicycle|wiring|harness|toy/i],
-  ];
-  const merged: Record<string, { pct: number; partners: Set<string> }> = {};
-  for (const it of items) {
-    const pct = parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0;
-    const cat = CATS.find(([, re]) => re.test(it.good))?.[0] ?? "Other Goods";
-    if (!merged[cat]) merged[cat] = { pct: 0, partners: new Set() };
-    merged[cat].pct += pct;
-    for (const p of it.partners.split(",").map((x) => x.trim()).filter(Boolean))
-      merged[cat].partners.add(p);
-  }
-  const data = Object.entries(merged).map(([label, v]) => ({
-    label,
-    pct: Math.round(v.pct * 10) / 10,
-    partners: [...v.partners].slice(0, 3).join(", ") + (v.partners.size > 3 ? ", …" : ""),
-  }));
-  const listed = data.reduce((a, d) => a + d.pct, 0);
-  const other = Math.max(0, Math.round((100 - listed) * 10) / 10);
-  const slices = [...data];
-  if (other > 0) slices.push({ label: "All other goods", pct: other, partners: "" });
+  const slices = mix.filter((d) => d.pct > 0);
   let a = 0;
   const segs = slices.map((d, i) => {
     const span = (d.pct / 100) * 360;
@@ -190,27 +162,20 @@ function TradePie({
         <svg viewBox="0 0 200 200" className="h-36 w-36 shrink-0">{segs}</svg>
         <ul className="w-full space-y-1.5">
           {slices.map((d, i) => (
-            <li key={i} className="text-xs">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] leading-snug text-stone-700">
-                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color(i) }} />
-                  <span className="break-words">{d.label}</span>
-                </span>
-                <span className="shrink-0 font-bold tabular-nums text-stone-900">{d.pct}%</span>
-              </div>
-              {d.partners && (
-                <p className="mt-0.5 break-words pl-4 text-[10px] leading-snug text-stone-500">
-                  {arrow} {d.partners}
-                </p>
-              )}
+            <li key={i} className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] leading-snug text-stone-700">
+                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color(i) }} />
+                <span className="break-words">{d.label}</span>
+              </span>
+              <span className="shrink-0 font-bold tabular-nums text-stone-900">{d.pct}%</span>
             </li>
           ))}
         </ul>
       </div>
       <p className="mt-2.5 text-[10px] leading-relaxed text-stone-500">
-        {arrow === "→"
-          ? "Slices show each good's share of total merchandise exports; partner countries are listed beneath each slice. Remaining goods are grouped as \u201cAll other goods\u201d."
-          : "Slices show each good's share of total merchandise imports; supplying countries are listed beneath each slice. Remaining goods are grouped as \u201cAll other goods\u201d."}
+        {arrow === "\u2192"
+          ? "Composition of total merchandise exports by broad category."
+          : "Composition of total merchandise imports by broad category."}
       </p>
     </div>
   );
@@ -269,23 +234,15 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
           ) : (
             <Missing />
           )}
-          {(e.topExports || e.topImports) && (
+          {(e.exportMix || e.importMix) && (
             <Card>
               <SubHead>Trade Flows</SubHead>
               <div className="mt-3 space-y-4">
-                {e.topExports && (
-                  <TradePie
-                    title="Exports"
-                    items={e.topExports}
-                    arrow="→"
-                  />
+                {e.exportMix && (
+                  <TradePie title="Exports" mix={e.exportMix} arrow="→" />
                 )}
-                {e.topImports && (
-                  <TradePie
-                    title="Imports"
-                    items={e.topImports}
-                    arrow="←"
-                  />
+                {e.importMix && (
+                  <TradePie title="Imports" mix={e.importMix} arrow="←" />
                 )}
               </div>
               <Source>
