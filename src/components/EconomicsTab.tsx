@@ -145,10 +145,20 @@ function TradePie({
   items: { good: string; pct: string; partners: string }[];
   arrow: string;
 }) {
-  const data = items.map((it) => ({
-    label: it.good,
-    pct: parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0,
-    partners: it.partners,
+  // merge refined + crude petroleum into a single "Petroleum" slice
+  const merged: Record<string, { pct: number; partners: string[] }> = {};
+  for (const it of items) {
+    const pct = parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0;
+    const isPetro = /crude|refined|petroleum/i.test(it.good);
+    const label = isPetro ? "Petroleum (crude & refined)" : it.good;
+    if (!merged[label]) merged[label] = { pct: 0, partners: [] };
+    merged[label].pct += pct;
+    if (it.partners) merged[label].partners.push(it.partners);
+  }
+  const data = Object.entries(merged).map(([label, v]) => ({
+    label,
+    pct: Math.round(v.pct * 10) / 10,
+    partners: v.partners.join("; "),
   }));
   const listed = data.reduce((a, d) => a + d.pct, 0);
   const other = Math.max(0, Math.round((100 - listed) * 10) / 10);
@@ -166,20 +176,20 @@ function TradePie({
       <p className="text-[11px] font-bold uppercase tracking-wide text-stone-700">
         {title}
       </p>
-      <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row">
-        <svg viewBox="0 0 200 200" className="h-40 w-40 shrink-0">{segs}</svg>
-        <ul className="w-full space-y-1.5">
+      <div className="mt-3 flex flex-col items-center gap-3 sm:flex-row">
+        <svg viewBox="0 0 200 200" className="h-28 w-28 shrink-0">{segs}</svg>
+        <ul className="w-full min-w-0 space-y-1.5">
           {slices.map((d, i) => (
             <li key={i} className="text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-stone-700">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-snug text-stone-700">
                   <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color(i) }} />
                   {d.label}
                 </span>
-                <span className="font-bold tabular-nums text-stone-900">{d.pct}%</span>
+                <span className="shrink-0 font-bold tabular-nums text-stone-900">{d.pct}%</span>
               </div>
               {d.partners && (
-                <p className="mt-0.5 pl-4 text-[10px] leading-snug text-stone-500">
+                <p className="mt-0.5 break-words pl-4 text-[10px] leading-snug text-stone-500">
                   {arrow} {d.partners}
                 </p>
               )}
