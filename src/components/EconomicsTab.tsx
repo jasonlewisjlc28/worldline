@@ -123,6 +123,44 @@ function DebtList({
   );
 }
 
+function TradeFlowList({
+  title,
+  items,
+  arrow,
+}: {
+  title: string;
+  items: { good: string; pct: string; partners: string }[];
+  arrow: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-stone-700">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-2">
+        {items.map((it, i) => (
+          <li
+            key={i}
+            className="rounded-md border border-[#e3c4c4] bg-white p-2.5"
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs font-semibold text-stone-900">
+                {it.good}
+              </span>
+              <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#b91c1c]">
+                {it.pct}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11px] leading-snug text-stone-500">
+              {arrow} {it.partners}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function EconomicsTab({ countryName }: { countryName: string }) {
   const [sub, setSub] = useState<Sub>("trade");
   const e = ECONOMICS[countryName];
@@ -176,43 +214,28 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
           ) : (
             <Missing />
           )}
-          {(e.exportPartners || e.mainGoods) && (
+          {(e.topExports || e.topImports) && (
             <Card>
-              <SubHead>Partners &amp; Goods</SubHead>
-              <dl className="mt-3 space-y-2.5 text-xs">
-                {e.exportPartners && (
-                  <div>
-                    <dt className="font-semibold text-stone-800">
-                      Main export destinations
-                    </dt>
-                    <dd className="mt-0.5 leading-relaxed text-stone-600">
-                      {e.exportPartners}
-                    </dd>
-                  </div>
+              <SubHead>Trade Flows</SubHead>
+              <div className="mt-3 space-y-4">
+                {e.topExports && (
+                  <TradeFlowList
+                    title="Top 5 exports"
+                    items={e.topExports}
+                    arrow="→"
+                  />
                 )}
-                {e.importPartners && (
-                  <div>
-                    <dt className="font-semibold text-stone-800">
-                      Main import sources
-                    </dt>
-                    <dd className="mt-0.5 leading-relaxed text-stone-600">
-                      {e.importPartners}
-                    </dd>
-                  </div>
+                {e.topImports && (
+                  <TradeFlowList
+                    title="Top 5 imports"
+                    items={e.topImports}
+                    arrow="←"
+                  />
                 )}
-                {e.mainGoods && (
-                  <div>
-                    <dt className="font-semibold text-stone-800">
-                      Key goods
-                    </dt>
-                    <dd className="mt-0.5 leading-relaxed text-stone-600">
-                      {e.mainGoods}
-                    </dd>
-                  </div>
-                )}
-              </dl>
+              </div>
               <Source>
-                Sources: World Bank WDI (latest 2019–2024); UN Comtrade / OEC.
+                Sources: UN Comtrade / OEC commodity-chapter data, latest
+                available year per country.
               </Source>
             </Card>
           )}
