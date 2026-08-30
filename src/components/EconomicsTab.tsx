@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ECONOMICS } from "../data/economics";
-import ResourcesTab, { ResourceFlowGlobe } from "./ResourcesTab";
+import ResourcesTab from "./ResourcesTab";
 import {
   ArrowLeftRight,
   Briefcase,
@@ -239,12 +239,6 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
               </Source>
             </Card>
           )}
-          <Card>
-            <SubHead>Resource trade flows</SubHead>
-            <div className="mt-3">
-              <ResourceFlowGlobe countryName={countryName} />
-            </div>
-          </Card>
         </div>
       ) : sub === "labor" ? (
         <div className="space-y-4">
