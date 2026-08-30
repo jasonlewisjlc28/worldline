@@ -123,7 +123,20 @@ function DebtList({
   );
 }
 
-function TradeFlowList({
+function polar(cx: number, cy: number, r: number, angle: number) {
+  const rad = ((angle - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+function donutSegment(cx: number, cy: number, r0: number, r1: number, a0: number, a1: number) {
+  const [x0, y0] = polar(cx, cy, r1, a0);
+  const [x1, y1] = polar(cx, cy, r1, a1);
+  const [x2, y2] = polar(cx, cy, r0, a1);
+  const [x3, y3] = polar(cx, cy, r0, a0);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M ${x0} ${y0} A ${r1} ${r1} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${r0} ${r0} 0 ${large} 0 ${x3} ${y3} Z`;
+}
+
+function TradePie({
   title,
   items,
   arrow,
@@ -132,31 +145,48 @@ function TradeFlowList({
   items: { good: string; pct: string; partners: string }[];
   arrow: string;
 }) {
+  const data = items.map((it) => ({
+    label: it.good,
+    pct: parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0,
+    partners: it.partners,
+  }));
+  const listed = data.reduce((a, d) => a + d.pct, 0);
+  const other = Math.max(0, Math.round((100 - listed) * 10) / 10);
+  const slices = [...data];
+  if (other > 0) slices.push({ label: "All other goods", pct: other, partners: "" });
+  let a = 0;
+  const segs = slices.map((d, i) => {
+    const span = (d.pct / 100) * 360;
+    const path = donutSegment(100, 100, 58, 96, a, a + span);
+    a += span;
+    return <path key={i} d={path} fill={color(i)} stroke="#f9f4ec" strokeWidth={1} />;
+  });
   return (
     <div>
       <p className="text-[11px] font-bold uppercase tracking-wide text-stone-700">
         {title}
       </p>
-      <ul className="mt-2 space-y-2">
-        {items.map((it, i) => (
-          <li
-            key={i}
-            className="rounded-md border border-[#e3c4c4] bg-white p-2.5"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs font-semibold text-stone-900">
-                {it.good}
-              </span>
-              <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#b91c1c]">
-                {it.pct}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] leading-snug text-stone-500">
-              {arrow} {it.partners}
-            </p>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row">
+        <svg viewBox="0 0 200 200" className="h-40 w-40 shrink-0">{segs}</svg>
+        <ul className="w-full space-y-1.5">
+          {slices.map((d, i) => (
+            <li key={i} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-stone-700">
+                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color(i) }} />
+                  {d.label}
+                </span>
+                <span className="font-bold tabular-nums text-stone-900">{d.pct}%</span>
+              </div>
+              {d.partners && (
+                <p className="mt-0.5 pl-4 text-[10px] leading-snug text-stone-500">
+                  {arrow} {d.partners}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -219,15 +249,15 @@ export default function EconomicsTab({ countryName }: { countryName: string }) {
               <SubHead>Trade Flows</SubHead>
               <div className="mt-3 space-y-4">
                 {e.topExports && (
-                  <TradeFlowList
-                    title="Top 5 exports"
+                  <TradePie
+                    title="Exports"
                     items={e.topExports}
                     arrow="→"
                   />
                 )}
                 {e.topImports && (
-                  <TradeFlowList
-                    title="Top 5 imports"
+                  <TradePie
+                    title="Imports"
                     items={e.topImports}
                     arrow="←"
                   />
