@@ -198,6 +198,11 @@ function TradePie({
           ))}
         </ul>
       </div>
+      <p className="mt-2.5 text-[10px] leading-relaxed text-stone-500">
+        {arrow === "→"
+          ? "Slices show each good's share of total merchandise exports; partner countries are listed beneath each slice. Remaining goods are grouped as \u201cAll other goods\u201d."
+          : "Slices show each good's share of total merchandise imports; supplying countries are listed beneath each slice. Remaining goods are grouped as \u201cAll other goods\u201d."}
+      </p>
     </div>
   );
 }
