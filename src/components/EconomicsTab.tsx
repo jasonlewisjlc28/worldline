@@ -145,16 +145,23 @@ function TradePie({
   items: { good: string; pct: string; partners: string }[];
   arrow: string;
 }) {
-  // merge refined + crude petroleum into a single "Petroleum" slice
+  // recategorize into broad trade categories
+  const CATS: [string, RegExp][] = [
+    ["Machinery & Electronics", /machin|electronic|computer|semiconductor|integrated circuit|telecom|equipment|appliance|electrical|instrument/i],
+    ["Transportation & Vehicles", /\bcar|vehicle|truck|aircraft|aero|ship|boat|auto|train|rail/i],
+    ["Energy & Mineral Fuels", /crude|refined|petroleum|oil|gas|lng|coal|fuel|electricit|uranium|energy/i],
+    ["Chemicals & Plastics", /chem|pharma|medic|plastic|fertiliz|cosmetic|rubber|ammonia/i],
+    ["Agriculture & Foodstuffs", /food|wheat|grain|corn|rice|meat|fish|fruit|vegetable|dairy|beverage|wine|coffee|tea|cocoa|sugar|soy|palm|livestock|agri|tobacco|date|cereal|animal/i],
+    ["Metals & Textiles", /steel|iron|copper|alumin|metal|ore|mineral|gold|silver|textile|cloth|fabric|apparel|footwear|cotton|zinc|nickel/i],
+  ];
   const merged: Record<string, { pct: number; partners: Set<string> }> = {};
   for (const it of items) {
     const pct = parseFloat(it.pct.replace(/[^0-9.]/g, "")) || 0;
-    const isPetro = /crude|refined|petroleum/i.test(it.good);
-    const label = isPetro ? "Petroleum (crude & refined)" : it.good;
-    if (!merged[label]) merged[label] = { pct: 0, partners: new Set() };
-    merged[label].pct += pct;
+    const cat = CATS.find(([, re]) => re.test(it.good))?.[0] ?? "Other Goods";
+    if (!merged[cat]) merged[cat] = { pct: 0, partners: new Set() };
+    merged[cat].pct += pct;
     for (const p of it.partners.split(",").map((x) => x.trim()).filter(Boolean))
-      merged[label].partners.add(p);
+      merged[cat].partners.add(p);
   }
   const data = Object.entries(merged).map(([label, v]) => ({
     label,
