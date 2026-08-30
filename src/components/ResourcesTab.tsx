@@ -310,7 +310,7 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
           ) : (
             <Missing />
           )}
-          {(r.fuel_exp != null || r.fuel_imp != null) && (
+          {(r.fuel_exp != null || r.fuel_imp != null || r.fuelOut || r.fuelIn) && (
             <Card>
               <SubHead>
                 <span className="inline-flex items-center gap-1"><Leaf size={12} /> Fuel trade dependency</span>
@@ -319,6 +319,39 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
                 {r.fuel_exp != null && <Bar label="Fuel share of exports" pct={r.fuel_exp} i={0} />}
                 {r.fuel_imp != null && <Bar label="Fuel share of imports" pct={r.fuel_imp} i={2} />}
               </div>
+              <div className="mt-4 space-y-3">
+                {r.fuelOut && r.fuelOut.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                      <span className="text-red-700">→</span> Fuels going out
+                    </p>
+                    <ul className="mt-1.5 space-y-2">
+                      {r.fuelOut.map((f, i) => (
+                        <li key={i} className="rounded-md border border-[#e3c4c4] bg-white p-2.5">
+                          <p className="text-xs font-semibold text-stone-900">{f.fuel}</p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">{f.detail}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {r.fuelIn && r.fuelIn.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                      <span className="text-red-700">←</span> Fuels coming in
+                    </p>
+                    <ul className="mt-1.5 space-y-2">
+                      {r.fuelIn.map((f, i) => (
+                        <li key={i} className="rounded-md border border-[#e3c4c4] bg-white p-2.5">
+                          <p className="text-xs font-semibold text-stone-900">{f.fuel}</p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">{f.detail}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <Source>Sources: EIA, UN Comtrade, national customs & energy ministries (latest documented).</Source>
             </Card>
           )}
         </div>
