@@ -152,7 +152,7 @@ function TradePie({
     ["Energy & Mineral Fuels", /crude|refined|petroleum|oil|gas|lng|coal|fuel|electricit|uranium|energy/i],
     ["Chemicals & Plastics", /cement|phosphate|chem|pharma|medic|plastic|fertiliz|cosmetic|rubber|ammonia/i],
     ["Agriculture & Foodstuffs", /food|citrus|cotton|wheat|grain|corn|rice|meat|fish|fruit|vegetable|dairy|beverage|wine|coffee|tea|cocoa|sugar|soy|palm|livestock|agri|tobacco|date|cereal|animal|banana|cashew|sesame|flower|gum arabic|cigar|coconut|cassava|khat|mango|pineapple|shrimp|produce|beef|brandy|alcohol|water/i],
-    ["Metals & Minerals", /steel|iron|copper|alumin|metal|ore|mineral|gold|silver|zinc|nickel|lithium|cobalt|coltan|titanium|bauxite|potash|salt|manganese|ferroalloy|diamond|gem|jewel|jade|emerald|platinum|chrome|chromite|tungsten|rare earth|graphite/i],
+    ["Metals & Minerals", /\bsteel\b|\biron\b|\bcopper|alumin|\bmetal|\bore\b|\bmineral|\bgold\b|\bsilver\b|\bzinc\b|\bnickel|\blithium|\bcobalt|coltan|titanium|\bbauxite|\bpotash|\bsalt\b|manganese|ferroalloy|diamond|\bgem|jewel|\bjade\b|emerald|platinum|\bchrome\b|chromite|tungsten|rare earth|graphite/i],
     ["Wood & Forestry Products", /timber|wood|lumber|pulp|paper|mahogany|okoumé|forestr/i],
     ["Furniture, Textiles & Manufactures", /furnitur|textile|cloth|fabric|apparel|footwear|garment|cashmere|leather|fashion|tire|bicycle|wiring|harness|toy/i],
   ];
