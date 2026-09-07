@@ -25,6 +25,8 @@ export type WorldMapProps = {
   onBackgroundClick?: () => void;
   // Geolocated resource markers (mines / refineries) shown as squares.
   markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[];
+  // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
+  focusRequest?: { lat: number; lng: number; nonce: number } | null;
 };
 
 // Reference-site palette: cream canvas, ink lines, soft glow dots, red accents.
@@ -44,6 +46,7 @@ export default function WorldMap({
   onCountryClick,
   onBackgroundClick,
   markers,
+  focusRequest,
 }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -224,6 +227,11 @@ export default function WorldMap({
     const [lng, lat] = geoCentroid(f as never);
     focusPoint(lng, lat);
   };
+
+  useEffect(() => {
+    if (focusRequest) focusPoint(focusRequest.lng, focusRequest.lat, 3.2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.nonce]);
 
   const spherePath =
     pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? "";

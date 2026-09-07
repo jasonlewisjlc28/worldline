@@ -181,7 +181,7 @@ function TradePie({
   );
 }
 
-export default function EconomicsTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[]) => void }) {
+export default function EconomicsTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[], focus?: [number, number]) => void }) {
   const [sub, setSub] = useState<Sub>("trade");
   const e = ECONOMICS[countryName];
 

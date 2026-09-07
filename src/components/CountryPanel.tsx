@@ -10,7 +10,7 @@ export type CountryPanelProps = {
   onClose: () => void;
   onSelectPerson: (id: number) => void;
   onSelectCompany: (name: string) => void;
-  onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[]) => void;
+  onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[], focus?: [number, number]) => void;
 };
 
 type EntityItem = {
