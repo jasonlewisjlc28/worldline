@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
+import MineralDetail from "./MineralDetail";
 
 type Sub = "production" | "food" | "energy";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
@@ -63,20 +64,38 @@ function donutSegment(cx: number, cy: number, r0: number, r1: number, a0: number
   const large = a1 - a0 > 180 ? 1 : 0;
   return `M ${x0} ${y0} A ${r1} ${r1} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${r0} ${r0} 0 ${large} 0 ${x3} ${y3} Z`;
 }
-function Donut({ data }: { data: { label: string; pct: number }[] }) {
+function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onSelect?: (label: string, pct: number) => void }) {
+  const segAngles: number[] = [];
   let a = 0;
-  const segs = data.map((d, i) => {
+  for (const d of data) {
+    segAngles.push(a);
+    a += (d.pct / 100) * 360;
+  }
+  const segs2 = data.map((d, i) => {
     const span = (d.pct / 100) * 360;
-    const path = donutSegment(100, 100, 58, 96, a, a + span);
-    a += span;
-    return <path key={i} d={path} fill={color(i)} stroke="#f9f4ec" strokeWidth={1} />;
+    const path = donutSegment(100, 100, 58, 96, segAngles[i], segAngles[i] + span);
+    return (
+      <path
+        key={i}
+        d={path}
+        fill={color(i)}
+        stroke="#f9f4ec"
+        strokeWidth={1}
+        className={onSelect ? "cursor-pointer transition hover:opacity-80" : undefined}
+        onClick={onSelect ? () => onSelect(d.label, d.pct) : undefined}
+      />
+    );
   });
   return (
     <div className="flex flex-col items-center gap-4 sm:flex-row">
-      <svg viewBox="0 0 200 200" className="h-44 w-44 shrink-0">{segs}</svg>
+      <svg viewBox="0 0 200 200" className="h-44 w-44 shrink-0">{segs2}</svg>
       <ul className="w-full space-y-1.5">
         {data.map((d, i) => (
-          <li key={i} className="flex items-center justify-between gap-2 text-xs">
+          <li
+            key={i}
+            className={`flex items-center justify-between gap-2 text-xs ${onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white" : ""}`}
+            onClick={onSelect ? () => onSelect(d.label, d.pct) : undefined}
+          >
             <span className="flex items-center gap-1.5 text-stone-700">
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color(i) }} />
               {d.label}
@@ -92,6 +111,7 @@ function Donut({ data }: { data: { label: string; pct: number }[] }) {
 // ---------------------------------------------------------------- main tab
 export default function ResourcesTab({ countryName }: { countryName: string }) {
   const [sub, setSub] = useState<Sub>("production");
+  const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const r = RESOURCES[countryName];
   const otherElec =
     r && r.elec_fossil != null && r.elec_hydro != null && r.elec_nuclear != null
@@ -146,7 +166,8 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
               {r.minerals && <p className="mt-2 text-[11px] leading-relaxed text-stone-600"><span className="font-semibold text-stone-800">Minerals:</span> {r.minerals}</p>}
               {r.mineralsChart && r.mineralsChart.length > 0 && (
                 <div className="mt-3">
-                  <Donut data={r.mineralsChart} />
+                  <p className="mb-2 text-[10px] italic text-stone-500">Click a mineral to see where it is mined &amp; refined.</p>
+                  <Donut data={r.mineralsChart} onSelect={(label, pct) => setMineralSel({ label, pct })} />
                   <p className="pt-2 text-[10px] leading-relaxed text-stone-500">Approximate share of mining output value — USGS / national mining statistics (latest available).</p>
                 </div>
               )}
@@ -362,6 +383,15 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
           )}
         </div>
       ) : null}
+
+      {mineralSel && (
+        <MineralDetail
+          countryName={countryName}
+          mineral={mineralSel.label}
+          pct={mineralSel.pct}
+          onClose={() => setMineralSel(null)}
+        />
+      )}
     </div>
   );
 }
