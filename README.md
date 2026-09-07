@@ -71,3 +71,29 @@ export default defineConfig([
   },
 ])
 ```
+
+
+## Collaborating on this codebase
+
+This project is shared via GitHub. Workflow for the AI sandbox and human collaborators:
+
+**For human collaborators:**
+```bash
+git clone https://github.com/<your-org>/worldline.git
+git checkout -b feat/my-change
+# ... edit ...
+npx tsc -b && npm run build   # must pass before pushing
+git push -u origin feat/my-change   # then open a PR
+```
+
+**For AI sandbox sessions:** at the start of each session, run:
+```bash
+bash scripts/sync.sh
+```
+This pulls the latest `origin/main` so sandbox edits build on your latest work.
+
+**Rules of the road:**
+- Work on feature branches; merge through pull requests (CI runs type-check + build on every PR).
+- Don't edit `src/data/*.ts` by hand unless it's a one-off fix — these are generated/injected by scripts; large changes should go through the data pipeline.
+- Keep the visual language: cream/ink palette (`#f4f1ea` base, `#b91c1c` accent), reuse the `Card`/`Bar`/`Donut` primitives.
+- The deployed build needs `public/countries-110m.json` copied into `dist/public/` (the CI and build steps handle this).
