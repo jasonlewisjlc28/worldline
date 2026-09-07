@@ -27,6 +27,7 @@ export default function WorldView() {
   const statusQuery = trpc.world.status.useQuery();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [resourceMarkers, setResourceMarkers] = useState<{ name: string; lat: number; lng: number; kind: "mine" | "refinery" }[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -192,6 +193,7 @@ export default function WorldView() {
           setSelectedCountry(name);
           setSelectedId(null);
         }}
+        markers={resourceMarkers}
         onBackgroundClick={() => {
           setSelectedId(null);
           setSelectedCountry(null);
@@ -237,7 +239,9 @@ export default function WorldView() {
           onClose={() => {
             setSelectedCountry(null);
             setSelectedCompany(null);
+            setResourceMarkers([]);
           }}
+          onShowMines={(sites) => setResourceMarkers(sites)}
           onSelectPerson={(pid) => {
             setSelectedId(pid);
             setSelectedCountry(null);

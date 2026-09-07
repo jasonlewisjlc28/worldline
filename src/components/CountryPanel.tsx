@@ -10,6 +10,7 @@ export type CountryPanelProps = {
   onClose: () => void;
   onSelectPerson: (id: number) => void;
   onSelectCompany: (name: string) => void;
+  onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[]) => void;
 };
 
 type EntityItem = {
@@ -210,6 +211,7 @@ export default function CountryPanel({
   onClose,
   onSelectPerson,
   onSelectCompany,
+  onShowMines,
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
@@ -286,7 +288,7 @@ export default function CountryPanel({
         {tab === "demographics" ? (
           <DemographicsTab countryName={countryName} />
         ) : tab === "economics" ? (
-          <EconomicsTab countryName={countryName} />
+          <EconomicsTab countryName={countryName} onShowMines={onShowMines} />
         ) : (
           <>
         {/* People */}

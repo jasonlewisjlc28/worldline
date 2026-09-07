@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
-import MineralDetail from "./MineralDetail";
+import { MINES } from "../data/mines";
 
 type Sub = "production" | "food" | "energy";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
@@ -109,7 +109,7 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 }
 
 // ---------------------------------------------------------------- main tab
-export default function ResourcesTab({ countryName }: { countryName: string }) {
+export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[]) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const r = RESOURCES[countryName];
@@ -167,7 +167,13 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
               {r.mineralsChart && r.mineralsChart.length > 0 && (
                 <div className="mt-3">
                   <p className="mb-2 text-[10px] italic text-stone-500">Click a mineral to see where it is mined &amp; refined.</p>
-                  <Donut data={r.mineralsChart} onSelect={(label, pct) => setMineralSel({ label, pct })} />
+                  <Donut data={r.mineralsChart} onSelect={(label, pct) => {
+                    setMineralSel({ label, pct });
+                    const sites = (MINES[countryName]?.[label] ?? []).map((s) => ({
+                      name: s.name, lat: s.lat, lng: s.lon, kind: s.kind,
+                    }));
+                    onShowMines?.(sites);
+                  }} />
                   <p className="pt-2 text-[10px] leading-relaxed text-stone-500">Approximate share of mining output value — USGS / national mining statistics (latest available).</p>
                 </div>
               )}
@@ -385,12 +391,35 @@ export default function ResourcesTab({ countryName }: { countryName: string }) {
       ) : null}
 
       {mineralSel && (
-        <MineralDetail
-          countryName={countryName}
-          mineral={mineralSel.label}
-          pct={mineralSel.pct}
-          onClose={() => setMineralSel(null)}
-        />
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e3c4c4] bg-[#f9f4ec] p-3 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-72 sm:rounded-lg sm:border">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-stone-900">{mineralSel.label}</p>
+              <p className="text-[10px] text-stone-500">{mineralSel.pct}% of mining output — sites pinned on globe</p>
+            </div>
+            <button
+              type="button"
+              className="rounded p-1 text-stone-500 hover:bg-white"
+              onClick={() => { setMineralSel(null); onShowMines?.([]); }}
+            >
+              ×
+            </button>
+          </div>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+            {(MINES[countryName]?.[mineralSel.label] ?? []).map((s, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[11px] text-stone-700">
+                <span className={`mt-1 inline-block h-2 w-2 shrink-0 ${s.kind === "refinery" ? "bg-[#0f766e]" : "bg-[#b91c1c]"}`} />
+                <span>
+                  <span className="font-semibold">{s.name}</span>
+                  {s.note && <span className="text-stone-500"> — {s.note}</span>}
+                </span>
+              </li>
+            ))}
+            {(MINES[countryName]?.[mineralSel.label] ?? []).length === 0 && (
+              <li className="text-[11px] italic text-stone-500">No named sites documented here yet.</li>
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
