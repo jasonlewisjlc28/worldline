@@ -351,7 +351,9 @@ export const MINES: Record<string, Record<string, MineSite[]>> = {
 "Tin & metals (revival)":[{name:"South Crofty, Cornwall (project)",lat:50.2,lon:-5.3,kind:"mine",note:""},{name:"Tungsten West — Hemerdon",lat:50.4,lon:-4.0,kind:"mine",note:""}],
 },
 "United States of America":{
-"Copper":[{name:"Morenci, Arizona",lat:0.0,lon:0,kind:"mine",note:""},{name:"Bingham Canyon, Utah",lat:40.52,lon:-112.15,kind:"mine",note:"Rio Tinto Kennecott"}],
+"Copper":[{name:"Morenci, Arizona",lat:33.07,lon:-109.36,kind:"mine",note:"Freeport-McMoRan"},{name:"Bingham Canyon, Utah",lat:40.52,lon:-112.15,kind:"mine",note:"Rio Tinto Kennecott"}],
+"Coal":[{name:"Powder River Basin, Wyoming — North Antelope Rochelle",lat:43.6,lon:-105.3,kind:"mine",note:"largest US coal mine"},{name:"Appalachia — West Virginia coalfields",lat:38.0,lon:-81.5,kind:"mine",note:"met & thermal coal"},{name:"Illinois Basin",lat:38.3,lon:-89.0,kind:"mine",note:""}],
+"Iron ore":[{name:"Mesabi Range, Minnesota",lat:47.4,lon:-92.9,kind:"mine",note:"taconite iron ore"},{name:"Marquette Range, Michigan",lat:46.6,lon:-87.6,kind:"mine",note:""}],
 "Gold":[{name:"Carlin Trend, Nevada",lat:40.8,lon:-116.2,kind:"mine",note:"Nevada Gold Mines"},{name:"Cortez, Nevada",lat:40.2,lon:-116.7,kind:"mine",note:""}],
 "Lithium & rare earths":[{name:"Mountain Pass, California",lat:35.48,lon:-115.53,kind:"mine",note:"MP Materials rare earths"},{name:"Thacker Pass, Nevada",lat:41.7,lon:-119.0,kind:"mine",note:"lithium clay project"}],
 },
@@ -380,3 +382,28 @@ export const MINES: Record<string, Record<string, MineSite[]>> = {
 "Gold":[{name:"Kwekwe & Kadoma fields",lat:-18.9,lon:29.8,kind:"mine",note:""}],
 },
 };
+
+const STOP = new Set(["ore", "and", "the", "of", "other", "mining", "output", "use", "non", "fuel", "metal", "metals", "mineral", "minerals", "gems", "gemstones", "precious", "rare", "earths", "earth", "production", "etc", "mixed", "various", "stone", "stones", "nonfuel"]);
+
+function tokens(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t && !STOP.has(t));
+}
+
+/** Look up sites for a minerals-chart label: exact key first, then word-overlap match. */
+export function findMineSites(country: string, label: string): MineSite[] {
+  const table = MINES[country];
+  if (!table) return [];
+  if (table[label]) return table[label];
+  const lt = tokens(label);
+  let best: MineSite[] = [];
+  let bestScore = 0;
+  for (const [key, sites] of Object.entries(table)) {
+    const kt = tokens(key);
+    const score = kt.filter((t) => lt.includes(t)).length + lt.filter((t) => kt.includes(t)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = sites;
+    }
+  }
+  return bestScore > 0 ? best : [];
+}

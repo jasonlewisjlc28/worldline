@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
-import { MINES } from "../data/mines";
+import { findMineSites } from "../data/mines";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
@@ -170,7 +170,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                   <p className="mb-2 text-[10px] italic text-stone-500">Click a mineral to see where it is mined &amp; refined.</p>
                   <Donut data={r.mineralsChart} onSelect={(label, pct) => {
                     setMineralSel({ label, pct });
-                    const sites = (MINES[countryName]?.[label] ?? []).map((s) => ({
+                    const sites = findMineSites(countryName, label).map((s) => ({
                       name: s.name, lat: s.lat, lng: s.lon, kind: s.kind,
                     }));
                     onShowMines?.(sites, COUNTRY_CENTROIDS[countryName]);
@@ -191,7 +191,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                     </button>
                   </div>
                   <ul className="mt-2 max-h-44 space-y-1 overflow-y-auto">
-                    {(MINES[countryName]?.[mineralSel.label] ?? []).map((s, i) => (
+                    {findMineSites(countryName, mineralSel.label).map((s, i) => (
                       <li key={i} className="flex items-start gap-1.5 text-[11px] text-stone-700">
                         <span className={`mt-1 inline-block h-2 w-2 shrink-0 ${s.kind === "refinery" ? "bg-[#0f766e]" : "bg-[#b91c1c]"}`} />
                         <span>
@@ -200,7 +200,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                         </span>
                       </li>
                     ))}
-                    {(MINES[countryName]?.[mineralSel.label] ?? []).length === 0 && (
+                    {findMineSites(countryName, mineralSel.label).length === 0 && (
                       <li className="text-[11px] italic text-stone-500">No named sites documented here yet.</li>
                     )}
                   </ul>
