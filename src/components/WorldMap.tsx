@@ -25,8 +25,8 @@ export type WorldMapProps = {
   onBackgroundClick?: () => void;
   // Geolocated resource markers (mines / refineries) shown as squares.
   markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[];
-  /** density heat points: [lat, lng, intensity 0..1] */
-  heat?: { lat: number; lng: number; w: number; color: string }[];
+  /** basin/shale outlines: hand-drawn style dashed loops with name labels */
+  heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string }[];
   // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
   focusRequest?: { lat: number; lng: number; nonce: number } | null;
 };
@@ -292,16 +292,21 @@ export default function WorldMap({
             );
           })}
 
-          {/* density heat — production basin glow, hidden behind the horizon */}
+          {/* basin/shale outlines — dashed hand-drawn loops, hidden behind the horizon */}
           {(heat ?? []).map((h, i) => {
             if (!isVisible(h.lng, h.lat)) return null;
             const pt = projection([h.lng, h.lat]) as [number, number] | null;
             if (!pt) return null;
-            const R = 26 + 44 * h.w;
+            const sc = projection.scale() / 2.2; // px per degree at this zoom (approx, orthographic)
+            const ex = Math.max(12, h.rx * sc);
+            const ey = Math.max(9, h.ry * sc);
             return (
-              <g key={`heat-${i}`} transform={`translate(${pt[0]},${pt[1]})`} className="pointer-events-none">
-                <circle r={R} fill={h.color} opacity={0.10 + 0.16 * h.w} style={{ filter: "blur(14px)" }} />
-                <circle r={R * 0.55} fill={h.color} opacity={0.12 + 0.20 * h.w} style={{ filter: "blur(9px)" }} />
+              <g key={`heat-${i}`} transform={`translate(${pt[0]},${pt[1]}) rotate(${h.rot})`} className="pointer-events-none">
+                <ellipse rx={ex} ry={ey} fill={h.color} fillOpacity={0.07} stroke={h.color} strokeWidth={1.6} strokeDasharray="7 5" strokeOpacity={0.9} />
+                <ellipse rx={ex * 0.94} ry={ey * 0.92} fill="none" stroke={h.color} strokeWidth={0.9} strokeDasharray="3 6" strokeOpacity={0.5} />
+                <text y={-ey - 6} textAnchor="middle" fontSize={10} fontWeight={700} fill={h.color} transform={`rotate(${-h.rot})`} style={{ textShadow: "0 0 4px #f4f1ea, 0 0 4px #f4f1ea" }}>
+                  {h.name}
+                </text>
               </g>
             );
           })}

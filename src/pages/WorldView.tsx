@@ -29,7 +29,7 @@ export default function WorldView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focusReq, setFocusReq] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
   const [resourceMarkers, setResourceMarkers] = useState<{ name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[]>([]);
-  const [resourceHeat, setResourceHeat] = useState<{ lat: number; lng: number; w: number; color: string }[]>([]);
+  const [resourceHeat, setResourceHeat] = useState<{ name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string }[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
