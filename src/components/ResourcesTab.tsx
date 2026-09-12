@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
-import { FUEL_SITES, type FuelKind } from "../data/fuelSites";
+import { FUEL_SITES, FUEL_STATS, type FuelKind } from "../data/fuelSites";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
@@ -103,7 +103,7 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 }
 
 // ---------------------------------------------------------------- main tab
-export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number]) => void }) {
+export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { lat: number; lng: number; w: number; color: string }[]) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
@@ -373,9 +373,14 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                         }
                         setFuelSel(fuel);
                         setMineralSel(null);
+                        const stats = FUEL_STATS[countryName]?.[fuel] ?? [];
                         onShowMines?.(
                           sites.map((s) => ({ name: s.name, lat: s.lat, lng: s.lon, kind: s.kind === "refinery" ? "refinery" as const : "mine" as const, color })),
-                          COUNTRY_CENTROIDS[countryName]
+                          COUNTRY_CENTROIDS[countryName],
+                          sites.map((s, i) => {
+                            const m = /(\d+)\s*%/.exec(stats[i] ?? "");
+                            return { lat: s.lat, lng: s.lon, w: m ? Math.min(1, parseInt(m[1], 10) / 55) : 0.35, color };
+                          })
                         );
                       }}
                       className={`rounded-md border p-2 text-center transition ${active ? "border-[#b91c1c] bg-[#fdeeee] ring-1 ring-[#b91c1c]" : "border-[#e3c4c4] bg-white"} ${sites.length > 0 ? "cursor-pointer hover:border-[#b91c1c]" : "cursor-default opacity-70"}`}
@@ -392,7 +397,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-bold text-stone-900">{fuelSel} — extraction &amp; refining sites</p>
-                      <p className="text-[10px] text-stone-500">Pinned on the globe — squares are extraction sites, diamonds are refineries/processing</p>
+                      <p className="text-[10px] text-stone-500">Glow on the globe shows basin intensity (sized by share of national output) — squares are extraction sites, diamonds are refineries/processing</p>
                     </div>
                     <button type="button" onClick={() => { setFuelSel(null); onShowMines?.([]); }} className="text-stone-400 hover:text-stone-700">×</button>
                   </div>
@@ -403,6 +408,9 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                         <span>
                           <span className="font-semibold text-stone-900">{s.name}</span>
                           {" — "}{s.kind === "refinery" ? "refinery/processing" : "extraction"}
+                          {(FUEL_STATS[countryName]?.[fuelSel] ?? [])[i] && (
+                            <span className="block text-[10px] font-semibold text-[#b91c1c]">{(FUEL_STATS[countryName]?.[fuelSel] ?? [])[i]}</span>
+                          )}
                           <span className="block text-[10px] text-stone-500">Operator: {s.company}</span>
                         </span>
                       </li>

@@ -25,6 +25,8 @@ export type WorldMapProps = {
   onBackgroundClick?: () => void;
   // Geolocated resource markers (mines / refineries) shown as squares.
   markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[];
+  /** density heat points: [lat, lng, intensity 0..1] */
+  heat?: { lat: number; lng: number; w: number; color: string }[];
   // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
   focusRequest?: { lat: number; lng: number; nonce: number } | null;
 };
@@ -46,6 +48,7 @@ export default function WorldMap({
   onCountryClick,
   onBackgroundClick,
   markers,
+  heat,
   focusRequest,
 }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -286,6 +289,20 @@ export default function WorldMap({
               >
                 <title>{name}</title>
               </path>
+            );
+          })}
+
+          {/* density heat — production basin glow, hidden behind the horizon */}
+          {(heat ?? []).map((h, i) => {
+            if (!isVisible(h.lng, h.lat)) return null;
+            const pt = projection([h.lng, h.lat]) as [number, number] | null;
+            if (!pt) return null;
+            const R = 26 + 44 * h.w;
+            return (
+              <g key={`heat-${i}`} transform={`translate(${pt[0]},${pt[1]})`} className="pointer-events-none">
+                <circle r={R} fill={h.color} opacity={0.10 + 0.16 * h.w} style={{ filter: "blur(14px)" }} />
+                <circle r={R * 0.55} fill={h.color} opacity={0.12 + 0.20 * h.w} style={{ filter: "blur(9px)" }} />
+              </g>
             );
           })}
 

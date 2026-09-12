@@ -29,6 +29,7 @@ export default function WorldView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focusReq, setFocusReq] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
   const [resourceMarkers, setResourceMarkers] = useState<{ name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[]>([]);
+  const [resourceHeat, setResourceHeat] = useState<{ lat: number; lng: number; w: number; color: string }[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -195,6 +196,7 @@ export default function WorldView() {
           setSelectedId(null);
         }}
         markers={resourceMarkers}
+        heat={resourceHeat}
         focusRequest={focusReq}
         onBackgroundClick={() => {
           setSelectedId(null);
@@ -242,9 +244,11 @@ export default function WorldView() {
             setSelectedCountry(null);
             setSelectedCompany(null);
             setResourceMarkers([]);
+            setResourceHeat([]);
           }}
-          onShowMines={(sites, focus) => {
+          onShowMines={(sites, focus, heat) => {
             setResourceMarkers(sites);
+            setResourceHeat(heat ?? []);
             if (focus) setFocusReq({ lat: focus[0], lng: focus[1], nonce: Date.now() });
           }}
           onSelectPerson={(pid) => {
