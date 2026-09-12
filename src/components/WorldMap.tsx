@@ -26,7 +26,7 @@ export type WorldMapProps = {
   // Geolocated resource markers (mines / refineries) shown as squares.
   markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[];
   /** basin/shale outlines: hand-drawn style dashed loops with name labels */
-  heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string }[];
+  heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[];
   // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
   focusRequest?: { lat: number; lng: number; nonce: number } | null;
 };
@@ -294,21 +294,31 @@ export default function WorldMap({
 
           {/* basin/shale outlines — dashed great-circle loops traced on the sphere */}
           {(heat ?? []).map((h, i) => {
-            const N = 90;
-            const rot = (h.rot * Math.PI) / 180;
-            const c = Math.cos(rot), sn = Math.sin(rot);
+            // deterministic per-name jitter so ellipse-based loops look hand-drawn
+            let hash = 0;
+            for (const ch of h.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+            const rand = (k: number) => { const x = Math.sin(hash + k * 127.1) * 43758.5453; return x - Math.floor(x); };
             const pts: [number, number][] = [];
             let vis = 0;
-            for (let k = 0; k <= N; k++) {
-              const a = (k / N) * Math.PI * 2;
-              const dlon = h.rx * Math.cos(a);
-              const dlat = h.ry * Math.sin(a);
-              const lon = h.lng + (dlon * c - dlat * sn) / Math.max(0.3, Math.cos((h.lat * Math.PI) / 180));
-              const lat = Math.max(-89, Math.min(89, h.lat + (dlon * sn + dlat * c)));
-              if (isVisible(lon, lat)) vis++;
-              pts.push([lon, lat]);
+            if (h.poly) {
+              for (const [lon, lat] of h.poly) { if (isVisible(lon, lat)) vis++; pts.push([lon, lat]); }
+              pts.push(h.poly[0]);
+            } else {
+              const N = 26;
+              const rot = (h.rot * Math.PI) / 180;
+              const c = Math.cos(rot), sn = Math.sin(rot);
+              for (let k = 0; k <= N; k++) {
+                const a = (k / N) * Math.PI * 2;
+                const j = 0.78 + 0.44 * rand(k); // wobble radius per vertex
+                const dlon = h.rx * j * Math.cos(a);
+                const dlat = h.ry * j * Math.sin(a);
+                const lon = h.lng + (dlon * c - dlat * sn) / Math.max(0.3, Math.cos((h.lat * Math.PI) / 180));
+                const lat = Math.max(-89, Math.min(89, h.lat + (dlon * sn + dlat * c)));
+                if (isVisible(lon, lat)) vis++;
+                pts.push([lon, lat]);
+              }
             }
-            if (vis < N * 0.4) return null; // mostly behind the horizon — skip
+            if (vis < pts.length * 0.4) return null; // mostly behind the horizon — skip
             const dOuter = geoPath(projection)({ type: "LineString", coordinates: pts });
             const cpt = projection([h.lng, h.lat]) as [number, number] | null;
             if (!dOuter || !cpt) return null;

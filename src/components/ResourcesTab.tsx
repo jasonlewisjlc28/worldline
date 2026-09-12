@@ -103,7 +103,7 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 }
 
 // ---------------------------------------------------------------- main tab
-export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string }[]) => void }) {
+export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
