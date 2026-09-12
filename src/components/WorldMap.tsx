@@ -292,21 +292,36 @@ export default function WorldMap({
             );
           })}
 
-          {/* basin/shale outlines — dashed hand-drawn loops, hidden behind the horizon */}
+          {/* basin/shale outlines — dashed great-circle loops traced on the sphere */}
           {(heat ?? []).map((h, i) => {
-            if (!isVisible(h.lng, h.lat)) return null;
-            const pt = projection([h.lng, h.lat]) as [number, number] | null;
-            if (!pt) return null;
-            const sc = projection.scale() / 2.2; // px per degree at this zoom (approx, orthographic)
-            const ex = Math.max(12, h.rx * sc);
-            const ey = Math.max(9, h.ry * sc);
+            const N = 90;
+            const rot = (h.rot * Math.PI) / 180;
+            const c = Math.cos(rot), sn = Math.sin(rot);
+            const pts: [number, number][] = [];
+            let vis = 0;
+            for (let k = 0; k <= N; k++) {
+              const a = (k / N) * Math.PI * 2;
+              const dlon = h.rx * Math.cos(a);
+              const dlat = h.ry * Math.sin(a);
+              const lon = h.lng + (dlon * c - dlat * sn) / Math.max(0.3, Math.cos((h.lat * Math.PI) / 180));
+              const lat = Math.max(-89, Math.min(89, h.lat + (dlon * sn + dlat * c)));
+              if (isVisible(lon, lat)) vis++;
+              pts.push([lon, lat]);
+            }
+            if (vis < N * 0.4) return null; // mostly behind the horizon — skip
+            const dOuter = geoPath(projection)({ type: "LineString", coordinates: pts });
+            const cpt = projection([h.lng, h.lat]) as [number, number] | null;
+            if (!dOuter || !cpt) return null;
+            const sc = projection.scale() / 55;
+            const ey = h.ry * sc;
             return (
-              <g key={`heat-${i}`} transform={`translate(${pt[0]},${pt[1]}) rotate(${h.rot})`} className="pointer-events-none">
-                <ellipse rx={ex} ry={ey} fill={h.color} fillOpacity={0.07} stroke={h.color} strokeWidth={1.6} strokeDasharray="7 5" strokeOpacity={0.9} />
-                <ellipse rx={ex * 0.94} ry={ey * 0.92} fill="none" stroke={h.color} strokeWidth={0.9} strokeDasharray="3 6" strokeOpacity={0.5} />
-                <text y={-ey - 6} textAnchor="middle" fontSize={10} fontWeight={700} fill={h.color} transform={`rotate(${-h.rot})`} style={{ textShadow: "0 0 4px #f4f1ea, 0 0 4px #f4f1ea" }}>
-                  {h.name}
-                </text>
+              <g key={`heat-${i}`} className="pointer-events-none">
+                <path d={dOuter} fill={h.color} fillOpacity={0.06} stroke={h.color} strokeWidth={1.4} strokeDasharray="6 5" strokeOpacity={0.85} />
+                {isVisible(h.lng, h.lat) && (
+                  <text x={cpt[0]} y={cpt[1] - ey - 8} textAnchor="middle" fontSize={10} fontWeight={700} fill={h.color} style={{ textShadow: "0 0 4px #f4f1ea, 0 0 4px #f4f1ea" }}>
+                    {h.name}
+                  </text>
+                )}
               </g>
             );
           })}
