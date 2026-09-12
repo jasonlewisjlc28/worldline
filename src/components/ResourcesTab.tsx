@@ -3,6 +3,7 @@ import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "luci
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
 import { FUEL_SITES, FUEL_STATS, FUEL_BASINS, type FuelKind } from "../data/fuelSites";
+import { POWER_SITES, POWER_COLORS, type PowerKind } from "../data/powerSites";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
@@ -107,6 +108,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
+  const [powerSel, setPowerSel] = useState<PowerKind | null>(null);
   const r = RESOURCES[countryName];
   const otherElec =
     r && r.elec_fossil != null && r.elec_hydro != null && r.elec_nuclear != null
@@ -345,6 +347,57 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                 {r.elec_nuclear != null && <Bar label="Nuclear" pct={r.elec_nuclear} i={7} />}
                 {otherElec != null && <Bar label="Wind, solar & other renewables" pct={otherElec} i={6} />}
               </div>
+              <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Where is it generated? Click to map:</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {(["Fossil", "Hydro", "Nuclear", "Solar", "Wind"] as PowerKind[]).map((kind) => {
+                  const sites = POWER_SITES[countryName]?.[kind] ?? [];
+                  if (sites.length === 0) return null;
+                  const color = POWER_COLORS[kind];
+                  const active = powerSel === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => {
+                        if (active) { setPowerSel(null); onShowMines?.([]); return; }
+                        setPowerSel(kind);
+                        setFuelSel(null);
+                        setMineralSel(null);
+                        onShowMines?.(
+                          sites.map((s) => ({ name: s.name, lat: s.lat, lng: s.lng, kind: s.kind === "area" ? "mine" as const : "refinery" as const, color })),
+                          COUNTRY_CENTROIDS[countryName]
+                        );
+                      }}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition ${active ? "text-white" : "text-stone-700 hover:border-[#b91c1c]"}`}
+                      style={{ borderColor: color, backgroundColor: active ? color : "white" }}
+                    >
+                      {kind} · {sites.length}
+                    </button>
+                  );
+                })}
+              </div>
+              {powerSel && (
+                <div className="mt-3 rounded-md border border-[#e3c4c4] bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-stone-900">{powerSel} generation areas</p>
+                      <p className="text-[10px] text-stone-500">Pinned on the globe — squares are regions/corridors, diamonds are named plants & dams</p>
+                    </div>
+                    <button type="button" onClick={() => { setPowerSel(null); onShowMines?.([]); }} className="text-stone-400 hover:text-stone-700">×</button>
+                  </div>
+                  <ul className="mt-2 space-y-2">
+                    {(POWER_SITES[countryName]?.[powerSel] ?? []).map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-stone-600">
+                        <span className={`mt-0.5 inline-block h-2.5 w-2.5 shrink-0 border border-white ${s.kind === "plant" ? "rotate-45" : ""}`} style={{ backgroundColor: POWER_COLORS[powerSel] }} />
+                        <span>
+                          <span className="font-semibold text-stone-900">{s.name}</span>
+                          {s.note && <span className="block text-[10px] text-stone-500">{s.note}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <Source>World Bank electricity-mix estimates (latest). "Wind, solar & other" derived as remainder.</Source>
             </Card>
           ) : (
