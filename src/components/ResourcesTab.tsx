@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
+import { FUEL_SITES, type FuelKind } from "../data/fuelSites";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
@@ -33,14 +34,6 @@ function Bar({ label, pct, i }: { label: string; pct: number; i: number }) {
       <div className="h-2 overflow-hidden rounded-full bg-[#efe3d3]">
         <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, backgroundColor: color(i) }} />
       </div>
-    </div>
-  );
-}
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[#e3c4c4] bg-white p-2.5">
-      <p className="text-sm font-bold tabular-nums text-stone-900">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-stone-500">{label}</p>
     </div>
   );
 }
@@ -110,9 +103,10 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 }
 
 // ---------------------------------------------------------------- main tab
-export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[], focus?: [number, number]) => void }) {
+export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number]) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
+  const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
   const r = RESOURCES[countryName];
   const otherElec =
     r && r.elec_fossil != null && r.elec_hydro != null && r.elec_nuclear != null
@@ -362,10 +356,60 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                 <span className="inline-flex items-center gap-1"><Flame size={12} /> Oil, Gas &amp; Coal production</span>
               </SubHead>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <Stat label="Crude oil, kb/d" value={r.oil != null ? r.oil.toLocaleString() : "—"} />
-                <Stat label="Natural gas, bcm/yr" value={r.gas != null ? r.gas.toLocaleString() : "—"} />
-                <Stat label="Coal, Mt/yr" value={r.coal != null ? r.coal.toLocaleString() : "—"} />
+                {([["Oil", r.oil, "Crude oil, kb/d", "#b45309"], ["Gas", r.gas, "Natural gas, bcm/yr", "#1d4ed8"], ["Coal", r.coal, "Coal, Mt/yr", "#44403c"]] as [FuelKind, number | null, string, string][]).map(([fuel, val, lbl, color]) => {
+                  const sites = FUEL_SITES[countryName]?.[fuel] ?? [];
+                  const active = fuelSel === fuel;
+                  return (
+                    <button
+                      key={fuel}
+                      type="button"
+                      disabled={sites.length === 0}
+                      title={sites.length === 0 ? "No geolocated sites documented" : `${sites.length} site(s) — click to pin on globe`}
+                      onClick={() => {
+                        if (active) {
+                          setFuelSel(null);
+                          onShowMines?.([]);
+                          return;
+                        }
+                        setFuelSel(fuel);
+                        setMineralSel(null);
+                        onShowMines?.(
+                          sites.map((s) => ({ name: s.name, lat: s.lat, lng: s.lon, kind: s.kind === "refinery" ? "refinery" as const : "mine" as const, color })),
+                          COUNTRY_CENTROIDS[countryName]
+                        );
+                      }}
+                      className={`rounded-md border p-2 text-center transition ${active ? "border-[#b91c1c] bg-[#fdeeee] ring-1 ring-[#b91c1c]" : "border-[#e3c4c4] bg-white"} ${sites.length > 0 ? "cursor-pointer hover:border-[#b91c1c]" : "cursor-default opacity-70"}`}
+                    >
+                      <p className="text-base font-bold text-stone-900">{val != null ? val.toLocaleString() : "—"}</p>
+                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-500">{lbl}</p>
+                      {sites.length > 0 && <p className="mt-0.5 text-[9px]" style={{ color }}>● {sites.length} site{sites.length > 1 ? "s" : ""}</p>}
+                    </button>
+                  );
+                })}
               </div>
+              {fuelSel && (
+                <div className="mt-3 rounded-md border border-[#e3c4c4] bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-stone-900">{fuelSel} — extraction &amp; refining sites</p>
+                      <p className="text-[10px] text-stone-500">Pinned on the globe — squares are extraction sites, diamonds are refineries/processing</p>
+                    </div>
+                    <button type="button" onClick={() => { setFuelSel(null); onShowMines?.([]); }} className="text-stone-400 hover:text-stone-700">×</button>
+                  </div>
+                  <ul className="mt-2 space-y-2">
+                    {(FUEL_SITES[countryName]?.[fuelSel] ?? []).map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-stone-600">
+                        <span className={`mt-0.5 inline-block h-2.5 w-2.5 shrink-0 border border-white ${s.kind === "refinery" ? "rotate-45" : ""}`} style={{ backgroundColor: s.kind === "refinery" ? "#0f766e" : "#b91c1c" }} />
+                        <span>
+                          <span className="font-semibold text-stone-900">{s.name}</span>
+                          {" — "}{s.kind === "refinery" ? "refinery/processing" : "extraction"}
+                          <span className="block text-[10px] text-stone-500">Operator: {s.company}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {r.oilNote && <p className="mt-2 text-[11px] leading-relaxed text-stone-600">{r.oilNote}</p>}
               {r.reserves && (
                 <p className="mt-2 text-[11px] leading-relaxed text-stone-600">

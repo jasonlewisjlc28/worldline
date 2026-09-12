@@ -24,7 +24,7 @@ export type WorldMapProps = {
   onCountryClick?: (countryName: string) => void;
   onBackgroundClick?: () => void;
   // Geolocated resource markers (mines / refineries) shown as squares.
-  markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery" }[];
+  markers?: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[];
   // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
   focusRequest?: { lat: number; lng: number; nonce: number } | null;
 };
@@ -294,11 +294,15 @@ export default function WorldMap({
             if (!isVisible(m.lng, m.lat)) return null;
             const pt = projection([m.lng, m.lat]) as [number, number] | null;
             if (!pt) return null;
-            const mk = m.kind === "refinery" ? "#0f766e" : RED;
+            const mk = m.color ?? (m.kind === "refinery" ? "#0f766e" : RED);
             return (
               <g key={`mk-${i}`} transform={`translate(${pt[0]},${pt[1]})`} className="pointer-events-none">
                 <circle r={7} fill={mk} opacity={0.22} style={{ filter: "blur(3px)" }} />
-                <rect x={-4} y={-4} width={8} height={8} fill={mk} stroke="#fff" strokeWidth={1} />
+                {m.kind === "refinery" ? (
+                  <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)" fill={mk} stroke="#fff" strokeWidth={1} />
+                ) : (
+                  <rect x={-4} y={-4} width={8} height={8} fill={mk} stroke="#fff" strokeWidth={1} />
+                )}
                 <text y={-8} textAnchor="middle" fontSize={9} fill={INK} fontWeight={600}>
                   {m.name}
                 </text>
