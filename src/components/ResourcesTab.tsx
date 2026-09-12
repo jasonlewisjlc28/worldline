@@ -3,7 +3,7 @@ import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "luci
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
 import { FUEL_SITES, FUEL_STATS, FUEL_BASINS, type FuelKind } from "../data/fuelSites";
-import { POWER_SITES, POWER_COLORS, type PowerKind } from "../data/powerSites";
+import { POWER_SITES, POWER_REGIONS, POWER_COLORS, type PowerKind } from "../data/powerSites";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
@@ -365,7 +365,8 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                         setMineralSel(null);
                         onShowMines?.(
                           sites.map((s) => ({ name: s.name, lat: s.lat, lng: s.lng, kind: s.kind === "area" ? "mine" as const : "refinery" as const, color })),
-                          COUNTRY_CENTROIDS[countryName]
+                          COUNTRY_CENTROIDS[countryName],
+                          (POWER_REGIONS[countryName]?.[kind] ?? []).map((b) => ({ ...b, color }))
                         );
                       }}
                       className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition ${active ? "text-white" : "text-stone-700 hover:border-[#b91c1c]"}`}
@@ -381,7 +382,7 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-bold text-stone-900">{powerSel} generation areas</p>
-                      <p className="text-[10px] text-stone-500">Pinned on the globe — squares are regions/corridors, diamonds are named plants & dams</p>
+                      <p className="text-[10px] text-stone-500">Dashed loops mark the generation regions — squares are regions/corridors, diamonds are named plants & dams</p>
                     </div>
                     <button type="button" onClick={() => { setPowerSel(null); onShowMines?.([]); }} className="text-stone-400 hover:text-stone-700">×</button>
                   </div>
