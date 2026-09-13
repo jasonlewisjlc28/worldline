@@ -3,6 +3,7 @@ import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "luci
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
 import { FUEL_SITES, FUEL_STATS, FUEL_BASINS, type FuelKind } from "../data/fuelSites";
+import { EIA_PLAYS_LL } from "../data/eiaPlays";
 import { POWER_SITES, POWER_REGIONS, POWER_COLORS, type PowerKind } from "../data/powerSites";
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
@@ -104,6 +105,9 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 }
 
 // ---------------------------------------------------------------- main tab
+const GAS_PLAYS = new Set(["Marcellus", "Utica", "Haynesville-Bossier", "Barnett", "Woodford", "Fayetteville", "Antrim", "New Albany", "Lewis", "Mancos", "Chattanooga", "Bend", "Pierre -Niobrara", "Niobrara", "Niobrara- Mowry", "HilliardBaxterMancos-Niobrara", "Cody", "Mowry", "Hermosa", "Manning Canyon", "Excello-Mulky", "Conasauga", "Floyd-Chattanooga", "Floyd-Neal", "Devonian (Ohio)", "Monterey", "Monterey-Temblor", "Heath", "Tuscaloosa"]);
+const OIL_PLAYS = new Set(["Bakken", "Three Forks", "Eagle Ford", "Wolfcamp", "Wolfcamp - Midland", "Spraberry", "Bone Spring", "Delaware", "Abo-Yeso", "Glorieta-Yeso", "Woodford-Caney", "Niobrara", "Barnett"]);
+
 export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
@@ -427,10 +431,25 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                         }
                         setFuelSel(fuel);
                         setMineralSel(null);
+                        const isUS = countryName === "United States of America";
+                        const basins = isUS && (fuel === "Oil" || fuel === "Gas")
+                          ? EIA_PLAYS_LL.filter((p) => (fuel === "Gas" ? GAS_PLAYS : OIL_PLAYS).has(p.play)).map((p) => {
+                              const xs = p.poly.map((q) => q[0]);
+                              const ys = p.poly.map((q) => q[1]);
+                              return {
+                                name: p.play,
+                                lat: (Math.min(...ys) + Math.max(...ys)) / 2,
+                                lng: (Math.min(...xs) + Math.max(...xs)) / 2,
+                                rx: 1, ry: 1, rot: 0,
+                                poly: p.poly,
+                                color,
+                              };
+                            })
+                          : (FUEL_BASINS[countryName]?.[fuel] ?? []).map((b) => ({ ...b, color }));
                         onShowMines?.(
                           sites.map((s) => ({ name: s.name, lat: s.lat, lng: s.lon, kind: s.kind === "refinery" ? "refinery" as const : "mine" as const, color })),
                           COUNTRY_CENTROIDS[countryName],
-                          (FUEL_BASINS[countryName]?.[fuel] ?? []).map((b) => ({ ...b, color }))
+                          basins
                         );
                       }}
                       className={`rounded-md border p-2 text-center transition ${active ? "border-[#b91c1c] bg-[#fdeeee] ring-1 ring-[#b91c1c]" : "border-[#e3c4c4] bg-white"} ${sites.length > 0 ? "cursor-pointer hover:border-[#b91c1c]" : "cursor-default opacity-70"}`}
