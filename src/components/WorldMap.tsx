@@ -457,14 +457,6 @@ export default function WorldMap({
           {hoveredCountry}
         </div>
       )}
-      {persons.length === 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-stone-400">
-          <p className="text-lg font-medium">This world is empty</p>
-          <p className="mt-1 text-sm">
-            Use the search bar below to add your first figure
-          </p>
-        </div>
-      )}
     </div>
   );
 }
