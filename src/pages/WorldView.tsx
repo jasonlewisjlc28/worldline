@@ -30,6 +30,7 @@ export default function WorldView() {
   const [focusReq, setFocusReq] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
   const [resourceMarkers, setResourceMarkers] = useState<{ name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[]>([]);
   const [resourceHeat, setResourceHeat] = useState<{ name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]>([]);
+  const [croplandCountry, setCroplandCountry] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -197,7 +198,11 @@ export default function WorldView() {
         }}
         markers={resourceMarkers}
         heat={resourceHeat}
+        cropland={croplandCountry}
         focusRequest={focusReq}
+        // right-hand panels are max-w-md (448px); keep the globe centered on
+        // the visible strip so focused countries aren't hidden behind them
+        obscuredRight={selected || selectedCountry || selectedCompany ? 448 : 0}
         onBackgroundClick={() => {
           setSelectedId(null);
           setSelectedCountry(null);
@@ -245,12 +250,14 @@ export default function WorldView() {
             setSelectedCompany(null);
             setResourceMarkers([]);
             setResourceHeat([]);
+            setCroplandCountry(null);
           }}
           onShowMines={(sites, focus, heat) => {
             setResourceMarkers(sites);
             setResourceHeat(heat ?? []);
             if (focus) setFocusReq({ lat: focus[0], lng: focus[1], nonce: Date.now() });
           }}
+          onShowCropland={(name) => setCroplandCountry(name)}
           onSelectPerson={(pid) => {
             setSelectedId(pid);
             setSelectedCountry(null);

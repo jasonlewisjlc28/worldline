@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Leaf, Droplets, Zap, Gem, Flame, Mountain, TreePine, Wheat } from "lucide-react";
 import { RESOURCES } from "../data/resources";
 import { findMineSites } from "../data/mines";
@@ -108,12 +108,19 @@ function Donut({ data, onSelect }: { data: { label: string; pct: number }[]; onS
 const GAS_PLAYS = new Set(["Marcellus", "Utica", "Haynesville-Bossier", "Barnett", "Woodford", "Fayetteville", "Antrim", "New Albany", "Lewis", "Mancos", "Chattanooga", "Bend", "Pierre -Niobrara", "Niobrara", "Niobrara- Mowry", "HilliardBaxterMancos-Niobrara", "Cody", "Mowry", "Hermosa", "Manning Canyon", "Excello-Mulky", "Conasauga", "Floyd-Chattanooga", "Floyd-Neal", "Devonian (Ohio)", "Monterey", "Monterey-Temblor", "Heath", "Tuscaloosa"]);
 const OIL_PLAYS = new Set(["Bakken", "Three Forks", "Eagle Ford", "Wolfcamp", "Wolfcamp - Midland", "Spraberry", "Bone Spring", "Delaware", "Abo-Yeso", "Glorieta-Yeso", "Woodford-Caney", "Niobrara", "Barnett"]);
 
-export default function ResourcesTab({ countryName, onShowMines }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void }) {
+export default function ResourcesTab({ countryName, onShowMines, onShowCropland }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void; onShowCropland?: (countryName: string | null) => void }) {
   const [sub, setSub] = useState<Sub>("production");
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
   const [powerSel, setPowerSel] = useState<PowerKind | null>(null);
   const r = RESOURCES[countryName];
+
+  // Food & Agriculture drives the cropland cornfield layer on the globe
+  useEffect(() => {
+    onShowCropland?.(sub === "food" ? countryName : null);
+    return () => onShowCropland?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sub, countryName]);
   const otherElec =
     r && r.elec_fossil != null && r.elec_hydro != null && r.elec_nuclear != null
       ? Math.max(0, Math.round((100 - r.elec_fossil - r.elec_hydro - r.elec_nuclear) * 10) / 10)
@@ -269,6 +276,16 @@ export default function ResourcesTab({ countryName, onShowMines }: { countryName
                 <Donut data={r.foodOutput} />
               </div>
               <Source>Approximate share of agricultural output value — FAOSTAT / national statistics (latest available).</Source>
+              <p className="mt-2 rounded-md border border-[#e3c4c4] bg-white p-2.5 text-[11px] leading-relaxed text-stone-700">
+                <Wheat size={12} className="mr-1 inline text-[#b91c1c]" />
+                The neon cornstalks mark this country's cropland on the globe —
+                each stalk stands on an actual cropland grid cell from a global
+                agricultural map, clustered into the country's growing regions.
+              </p>
+              <Source>
+                Cropland regions: Mehrabi et al., "Global agricultural lands in
+                the year 2015" (ESSD 2025, CC-BY 4.0), resampled to 0.25°.
+              </Source>
             </Card>
           ) : (
             <Missing />

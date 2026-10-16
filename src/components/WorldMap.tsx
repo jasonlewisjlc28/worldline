@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { geoOrthographic, geoPath, geoGraticule10, geoDistance, geoCentroid } from "d3-geo";
-import { drag } from "d3-drag";
-import { zoom as d3zoom } from "d3-zoom";
-import { select } from "d3-selection";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import earcut from "earcut";
+import { geoCentroid, geoContains, geoDistance } from "d3-geo";
 import { feature } from "topojson-client";
 import type { Topology } from "topojson-specification";
 import type { ConnectionDto, PersonDto } from "@contracts/types";
@@ -29,6 +29,10 @@ export type WorldMapProps = {
   heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[];
   // When set (with a new nonce), smoothly rotate/zoom the globe to this point.
   focusRequest?: { lat: number; lng: number; nonce: number } | null;
+  /** country whose cropland regions should be marked with the neon cornfield */
+  cropland?: string | null;
+  /** width of the UI panel overlapping the right edge; the globe re-centers left */
+  obscuredRight?: number;
 };
 
 // Reference-site palette: cream canvas, ink lines, soft glow dots, red accents.
@@ -37,6 +41,410 @@ const INK_SOFT = "#a8a29e";
 const CREAM = "#f4f1ea";
 const LAND = "#ece7dd";
 const RED = "#b91c1c";
+const HOVER = "#f0d5d5";
+const SELECTED = "#e8c8c8";
+
+const DEG = Math.PI / 180;
+const R = 1; // globe radius in world units
+const FOV = 30; // degrees — near-orthographic feel
+const SURFACE = 1.002; // land sits above the ocean sphere
+const GRATICULE = 1.0005; // graticule under the land (as in the old SVG draw order)
+
+type Cam = { az: number; el: number; dist: number };
+
+const toVec3 = (lng: number, lat: number, r: number = R): THREE.Vector3 => {
+  const phi = (90 - lat) * DEG;
+  const theta = (lng + 180) * DEG;
+  return new THREE.Vector3(
+    -r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta)
+  );
+};
+
+const azOf = (c: THREE.Vector3) => Math.atan2(c.x, c.z);
+const elOf = (c: THREE.Vector3) => Math.asin(Math.max(-1, Math.min(1, c.y / c.length())));
+
+const vecToLngLat = (v: THREE.Vector3): [number, number] => {
+  const lat = 90 - Math.acos(Math.max(-1, Math.min(1, v.y))) / DEG;
+  let lng = Math.atan2(v.z, -v.x) / DEG - 180;
+  if (lng < -180) lng += 360;
+  if (lng > 180) lng -= 360;
+  return [lng, lat];
+};
+
+// Densify one ring segment with sphere-hugging points so triangulated edges
+// never dip below the ocean surface (which used to show as a white fringe).
+const MAX_EDGE = 1.5 * DEG;
+const densify = (out: [number, number][], a: [number, number], b: [number, number]) => {
+  const va = toVec3(a[0], a[1], 1);
+  const vb = toVec3(b[0], b[1], 1);
+  const steps = Math.min(16, Math.floor(va.angleTo(vb) / MAX_EDGE));
+  for (let s = 1; s <= steps; s++) {
+    const v = va.clone().lerp(vb, s / (steps + 1)).normalize();
+    out.push(vecToLngLat(v));
+  }
+  out.push(b);
+};
+
+// Unwrap a ring's longitudes around its first point so polygons crossing the
+// antimeridian stay continuous for triangulation, and densify every edge.
+const unwrapRing = (ring: [number, number][]): [number, number][] => {
+  const out: [number, number][] = [[ring[0][0], ring[0][1]]];
+  for (let i = 1; i < ring.length; i++) {
+    let lng = ring[i][0];
+    const prev = out[out.length - 1][0];
+    while (lng - prev > 180) lng -= 360;
+    while (lng - prev < -180) lng += 360;
+    densify(out, out[out.length - 1], [lng, ring[i][1]]);
+  }
+  return out;
+};
+
+// Angular radius of a feature around its centroid (sampled ring vertices).
+const angularRadius = (f: CountryFeature, centroid: [number, number]): number => {
+  let max = 0.02;
+  const visit = (ring: [number, number][]) => {
+    for (const [lng, lat] of ring) {
+      const d = geoDistance([lng, lat], centroid);
+      if (d > max) max = d;
+    }
+  };
+  const g = f.geometry;
+  if (g.type === "Polygon") g.coordinates.forEach((p) => visit(p as [number, number][]));
+  else if (g.type === "MultiPolygon") g.coordinates.forEach((poly) => poly.forEach((p) => visit(p as [number, number][])));
+  return max;
+};
+
+const fitDistance = (alpha: number): number => {
+  const beta = (FOV / 2) * 0.55 * DEG; // country fills ~55% of the view height
+  const d = 1.1 * ((Math.sin(alpha) / Math.tan(beta)) - Math.cos(alpha));
+  // never fly so close that the camera sits on the ground — small countries
+  // simply appear smaller instead of filling the whole frame
+  return Math.max(0.55, Math.min(6, d));
+};
+
+// Camera-pose solver for country camera mode. The preferred starting tilt
+// Camera-pose solver for country camera mode. The goal is a "map-like" view:
+// hover nearly straight over the country's spherical center so the country
+// reads like a flat map of itself (north-up roll is applied by the render
+// loop). If any part of the country would still fall outside the visible cap
+// (hidden behind the globe's curve), blend smoothly toward a fully face-on
+// pose until every vertex sits inside the horizon.
+const countryView = (f: CountryFeature, centroidLngLat: [number, number]) => {
+  const [lng, lat] = centroidLngLat;
+  const C = toVec3(lng, lat, R);
+  const verts: THREE.Vector3[] = [];
+  const visit = (ring: [number, number][]) => {
+    for (const [vlng, vlat] of ring) verts.push(toVec3(vlng, vlat, R));
+  };
+  const g = f.geometry;
+  if (g.type === "Polygon") g.coordinates.forEach((p) => visit(p as [number, number][]));
+  else if (g.type === "MultiPolygon") g.coordinates.forEach((poly) => poly.forEach((p) => visit(p as [number, number][])));
+
+  // spherical center of the country (where a face-on camera would hover)
+  const mean = new THREE.Vector3();
+  for (const v of verts) mean.add(v);
+  const M = mean.lengthSq() < 1e-9 ? C.clone() : mean.normalize();
+
+  const alpha = angularRadius(f, [lng, lat]);
+  const angBetween = (a: THREE.Vector3, b: THREE.Vector3) =>
+    Math.acos(Math.max(-1, Math.min(1, a.dot(b) / (a.length() * b.length()))));
+  // horizon angle for a camera at radius p from the globe center
+  const horizon = (p: number) => Math.acos(Math.min(1, R / p));
+
+  // Face-on pose: the camera hovers along the radius through the country's
+  // spherical center, so the country reads like a flat map of itself
+  // (north-up roll is applied by the render loop). Zoom out only as far as
+  // needed to keep every vertex comfortably inside the visible cap.
+  const S = M;
+  const sc = S.dot(C);
+  let d = fitDistance(alpha);
+  for (let k = 0; k < 40; k++) {
+    const disc = sc * sc - (1 - d * d);
+    if (disc >= 0) {
+      const p = sc + Math.sqrt(disc);
+      let worst = 0;
+      for (const v of verts) worst = Math.max(worst, angBetween(v, S));
+      if (worst <= 0.85 * horizon(p)) break;
+    }
+    d *= 1.08;
+  }
+  const p = sc + Math.sqrt(Math.max(0, sc * sc - (1 - d * d)));
+  const u = S.clone().multiplyScalar(p).sub(C).divideScalar(d); // unit offset
+  return {
+    az: azOf(u),
+    el: Math.asin(Math.max(-1, Math.min(1, u.y))),
+    dist: d,
+    focus: C,
+  };
+};
+
+// ----------------------------------------------------------- cropland layer
+// Global cropland grid (Mehrabi et al. 2025, CC-BY 4.0): 1440x720 Uint8
+// percent cells, 0.25°, row 0 = 90°N..89.75°N, col 0 = 180°W..179.75°W.
+const GRID_W = 1440;
+const GRID_H = 720;
+const GRID_CELL = 0.25;
+const CROPLAND_MIN_PCT = 20;
+
+let croplandGridCache: Uint8Array | null = null;
+let croplandGridPromise: Promise<Uint8Array> | null = null;
+const loadCroplandGrid = () => {
+  if (croplandGridCache) return Promise.resolve(croplandGridCache);
+  if (!croplandGridPromise) {
+    croplandGridPromise = fetch("/data/cropland.bin")
+      .then((r) => r.arrayBuffer())
+      .then((b) => {
+        croplandGridCache = new Uint8Array(b);
+        return croplandGridCache;
+      });
+  }
+  return croplandGridPromise;
+};
+
+// The cornfield GLB ships PBR materials, but the scene is unlit (flat
+// MeshBasicMaterial everywhere) — convert to basic, keeping the neon look via
+// emissive colors, alpha-cutout leaf/tassel cards, and the transparent body.
+let cornfieldCache: THREE.Group | null = null;
+let cornfieldPromise: Promise<THREE.Group> | null = null;
+const loadCornfield = () => {
+  if (cornfieldCache) return Promise.resolve(cornfieldCache);
+  if (!cornfieldPromise) {
+    cornfieldPromise = new GLTFLoader()
+      .loadAsync("/preview/neon-corn-lowpoly.glb")
+      .then((g) => {
+        g.scene.traverse((o) => {
+          // Hide the plane outline boxes (same as the preview's "Planes off"):
+          // the red drawings on the cards stay visible. NOTE: wire_cards is a
+          // LINES primitive, which GLTFLoader builds as THREE.Line — not a
+          // Mesh — so this check must run before the isMesh filter below.
+          if (o.name === "wire_cards") o.visible = false;
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          const conv = mats.map((m) => {
+            const src = m as THREE.MeshStandardMaterial;
+            const emissive =
+              src.emissive && (src.emissive.r > 0.01 || src.emissive.g > 0.01 || src.emissive.b > 0.01)
+                ? src.emissive
+                : src.color;
+            return new THREE.MeshBasicMaterial({
+              color: emissive.clone(),
+              map: src.map ?? null,
+              transparent: src.transparent,
+              opacity: src.opacity,
+              alphaTest: src.alphaTest || 0,
+              side: src.side,
+              wireframe: src.wireframe,
+              depthWrite: src.depthWrite,
+            });
+          });
+          mesh.material = Array.isArray(mesh.material) ? conv : conv[0];
+        });
+        cornfieldCache = g.scene;
+        return g.scene;
+      });
+  }
+  return cornfieldPromise;
+};
+
+type CroplandRegion = {
+  lng: number;
+  lat: number;
+  radiusDeg: number;
+  cells: number;
+  pts: { lng: number; lat: number }[]; // actual cropland cell centers
+};
+
+// Deterministic RNG so a country's scatter layout survives re-renders.
+const mulberry32 = (seed: number) => () => {
+  seed |= 0;
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const hashName = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+// Find contiguous cropland regions inside a country: threshold the grid,
+// keep cells inside the country polygon, then 8-connected-component cluster.
+const croplandRegions = (f: CountryFeature, grid: Uint8Array): CroplandRegion[] => {
+  let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
+  const visitRing = (ring: [number, number][]) => {
+    for (const [lng, lat] of ring) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+  };
+  const g = f.geometry;
+  if (g.type === "Polygon") g.coordinates.forEach((p) => visitRing(p as [number, number][]));
+  else if (g.type === "MultiPolygon") g.coordinates.forEach((poly) => poly.forEach((p) => visitRing(p as [number, number][])));
+
+  const j0 = Math.max(0, Math.floor((minLng + 180) / GRID_CELL));
+  const j1 = Math.min(GRID_W - 1, Math.floor((maxLng + 180) / GRID_CELL));
+  const i0 = Math.max(0, Math.floor((90 - maxLat) / GRID_CELL));
+  const i1 = Math.min(GRID_H - 1, Math.floor((90 - minLat) / GRID_CELL));
+
+  const inside = new Set<number>();
+  for (let i = i0; i <= i1; i++) {
+    const lat = 90 - (i + 0.5) * GRID_CELL;
+    for (let j = j0; j <= j1; j++) {
+      if (grid[i * GRID_W + j] < CROPLAND_MIN_PCT) continue;
+      const lng = -180 + (j + 0.5) * GRID_CELL;
+      if (geoContains(f as never, [lng, lat])) inside.add(i * GRID_W + j);
+    }
+  }
+  if (inside.size === 0) return [];
+
+  // 8-connected components
+  const clusters: { key: number; lng: number; lat: number; pct: number }[][] = [];
+  const seen = new Set<number>();
+  for (const start of inside) {
+    if (seen.has(start)) continue;
+    const comp: { key: number; lng: number; lat: number; pct: number }[] = [];
+    const stack = [start];
+    seen.add(start);
+    while (stack.length) {
+      const key = stack.pop()!;
+      const i = Math.floor(key / GRID_W);
+      const j = key % GRID_W;
+      const lng = -180 + (j + 0.5) * GRID_CELL;
+      const lat = 90 - (i + 0.5) * GRID_CELL;
+      comp.push({ key, lng, lat, pct: grid[key] });
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          if (!di && !dj) continue;
+          const ni = i + di, nj = j + dj;
+          if (ni < 0 || ni >= GRID_H || nj < 0 || nj >= GRID_W) continue;
+          const nk = ni * GRID_W + nj;
+          if (inside.has(nk) && !seen.has(nk)) {
+            seen.add(nk);
+            stack.push(nk);
+          }
+        }
+      }
+    }
+    clusters.push(comp);
+  }
+
+  // rank by total cropland weight, keep the dominant regions
+  clusters.sort((a, b) => {
+    const sa = a.reduce((s, c) => s + c.pct, 0);
+    const sb = b.reduce((s, c) => s + c.pct, 0);
+    return sb - sa;
+  });
+  const out: CroplandRegion[] = [];
+  for (const comp of clusters) {
+    if (out.length >= 5) break;
+    const total = comp.reduce((s, c) => s + c.pct, 0);
+    if (total < 30) continue; // ignore specks
+    let lng = 0, lat = 0;
+    for (const c of comp) {
+      lng += c.lng * c.pct;
+      lat += c.lat * c.pct;
+    }
+    lng /= total;
+    lat /= total;
+    let radius = 0.7; // minimum so small regions still read
+    for (const c of comp) radius = Math.max(radius, geoDistance([c.lng, c.lat], [lng, lat]) / DEG);
+    radius += 0.18; // half cell diagonal padding
+    out.push({
+      lng,
+      lat,
+      radiusDeg: radius,
+      cells: comp.length,
+      pts: comp.map((c) => ({ lng: c.lng, lat: c.lat })),
+    });
+  }
+  return out;
+};
+
+// Evenly spread subset of the region's real cropland cells: farthest-point
+// sampling keeps the geographic shape instead of random scatter.
+const sampleCells = (
+  pts: { lng: number; lat: number }[],
+  n: number,
+  rng: () => number
+) => {
+  if (pts.length <= n) return pts;
+  const d2 = (a: { lng: number; lat: number }, b: { lng: number; lat: number }) => {
+    const dx = a.lng - b.lng;
+    const dy = (a.lat - b.lat) * 0.7; // rough latitude compression
+    return dx * dx + dy * dy;
+  };
+  const picked = new Set<number>();
+  const first = Math.floor(rng() * pts.length);
+  picked.add(first);
+  const chosen = [pts[first]];
+  const dist = pts.map((p) => d2(p, pts[first]));
+  while (chosen.length < n) {
+    let bi = -1;
+    let bd = -1;
+    for (let i = 0; i < pts.length; i++) {
+      if (picked.has(i)) continue;
+      if (dist[i] > bd) {
+        bd = dist[i];
+        bi = i;
+      }
+    }
+    if (bi < 0) break;
+    picked.add(bi);
+    chosen.push(pts[bi]);
+    for (let i = 0; i < pts.length; i++) {
+      const nd = d2(pts[i], pts[bi]);
+      if (nd < dist[i]) dist[i] = nd;
+    }
+  }
+  return chosen;
+};
+
+// Canvas-texture label sprite (name text with cream halo).
+const makeLabelSprite = (text: string, color: string, opts?: { square?: boolean; glow?: string; fontSize?: number }): THREE.Sprite => {
+  const fontSize = opts?.fontSize ?? 30;
+  const pad = 12;
+  const cv = document.createElement("canvas");
+  const ctx = cv.getContext("2d")!;
+  ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+  const tw = Math.ceil(ctx.measureText(text).width);
+  cv.width = Math.max(64, tw + pad * 2);
+  cv.height = fontSize + (opts?.square ? 90 : pad * 2);
+  ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const cx = cv.width / 2;
+  if (opts?.square) {
+    // soft glow
+    const g = ctx.createRadialGradient(cx, cv.height - 34, 2, cx, cv.height - 34, 30);
+    g.addColorStop(0, opts.glow ?? color);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - 9, cv.height - 43, 18, 18);
+  }
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = CREAM;
+  ctx.strokeText(text, cx, fontSize / 2 + 2);
+  ctx.fillStyle = color;
+  ctx.fillText(text, cx, fontSize / 2 + 2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const worldH = 0.062;
+  sp.scale.set((cv.width / cv.height) * worldH, worldH, 1);
+  sp.renderOrder = 10;
+  return sp;
+};
 
 export default function WorldMap({
   persons,
@@ -50,16 +458,41 @@ export default function WorldMap({
   markers,
   heat,
   focusRequest,
+  cropland,
+  obscuredRight = 0,
 }: WorldMapProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [countries, setCountries] = useState<CountryFeature[]>([]);
   const [size, setSize] = useState({ w: 1200, h: 800 });
-  const [rotation, setRotation] = useState<[number, number, number]>([-20, -30, 0]);
-  const [globeK, setGlobeK] = useState(1);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
-  const [hoveredPerson, setHoveredPerson] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+
+  // --- three.js scene lives in refs (rendered imperatively, not by React) ---
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const countriesGroupRef = useRef<THREE.Group | null>(null);
+  const overlayGroupRef = useRef<THREE.Group | null>(null); // persons/arcs/markers/heat
+  const countryMeshesRef = useRef<{ mesh: THREE.Mesh; outlines: THREE.LineLoop[]; name: string }[]>([]);
+  const personSpritesRef = useRef<Map<number, THREE.Sprite>>(new Map());
+  const pulsesRef = useRef<{ curve: THREE.QuadraticBezierCurve3; sprite: THREE.Sprite; offset: number }[]>([]);
+  const camRef = useRef<Cam>({ az: 0.65, el: 0.52, dist: 4.4 });
+  const focusRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
+  const obscuredRightRef = useRef(obscuredRight);
+  useEffect(() => {
+    obscuredRightRef.current = obscuredRight;
+  }, [obscuredRight]);
+  const tweenToken = useRef(0);
+  const zoomToken = useRef(0);
+  const zoomAnim = useRef<{ from: number; to: number } | null>(null);
+  // distance a flyTo tween is heading toward; wheel zoom measures its first
+  // step from this so scrolling mid-flight doesn't lurch from a far-out point
+  const flyDistTarget = useRef<number | null>(null);
+  const lastCountryPoint = useRef<THREE.Vector3 | null>(null);
+  const desiredOverview = useRef<Cam>({ az: 0.65, el: 0.52, dist: 4.4 });
+  const croplandGroupRef = useRef<THREE.Group | null>(null);
+  const croplandToken = useRef(0);
+  const croplandCountRef = useRef(0);
 
   useEffect(() => {
     fetch("/countries-110m.json")
@@ -84,58 +517,381 @@ export default function WorldMap({
     return () => ro.disconnect();
   }, []);
 
-  const baseRadius = Math.min(size.w, size.h) * 0.42;
+  const overviewDist = (w: number, h: number) => {
+    const fPx = (h / 2) / Math.tan((FOV / 2) * DEG); // focal length in px
+    return Math.max(2.2, fPx / (0.42 * Math.min(w, h)));
+  };
 
-  const { projection, pathGen } = useMemo(() => {
-    const projection = geoOrthographic()
-      .translate([size.w / 2, size.h / 2])
-      .scale(baseRadius * globeK)
-      .rotate(rotation)
-      .clipAngle(90);
-    const pathGen = geoPath(projection);
-    return { projection, pathGen };
-  }, [size, rotation, globeK, baseRadius]);
+  // Build the static globe: sphere, rim, graticule.
+  const buildGlobe = (scene: THREE.Scene) => {
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64), new THREE.MeshBasicMaterial({ color: CREAM })));
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.006, 96, 64), new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide })));
+    // graticule every 20°
+    const g: number[] = [];
+    const seg = 72;
+    const push = (a: THREE.Vector3, b: THREE.Vector3) => g.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    for (let lng = -180; lng < 180; lng += 20) {
+      for (let i = 0; i < seg; i++) {
+        const la = -90 + (i / seg) * 180;
+        const lb = -90 + ((i + 1) / seg) * 180;
+        push(toVec3(lng, la, GRATICULE), toVec3(lng, lb, GRATICULE));
+      }
+    }
+    for (let lat = -80; lat <= 80; lat += 20) {
+      for (let i = 0; i < seg; i++) {
+        const ln = -180 + (i / seg) * 360;
+        const ln2 = -180 + ((i + 1) / seg) * 360;
+        push(toVec3(ln, lat, GRATICULE), toVec3(ln2, lat, GRATICULE));
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(g, 3));
+    scene.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: INK_SOFT, transparent: true, opacity: 0.55 })));
+  };
 
-  // Drag to rotate the globe; wheel to zoom (scale extent keeps the globe sane).
+  // Initialize renderer/scene/camera once.
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const sel = select(svg);
+    const el = containerRef.current;
+    if (!el) return;
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.touchAction = "none";
+    el.appendChild(renderer.domElement);
 
-    const dragBehavior = drag<SVGSVGElement, unknown>().on("drag", (event: { dx: number; dy: number }) => {
-      setRotation((prev) => {
-        const sensitivity = 0.35 / Math.max(0.6, globeK);
-        const next: [number, number, number] = [
-          prev[0] + event.dx * sensitivity,
-          Math.max(-85, Math.min(85, prev[1] - event.dy * sensitivity)),
-          0,
-        ];
-        return next;
-      });
-    });
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(CREAM);
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 200);
+    buildGlobe(scene);
 
-    const zoomBehavior = d3zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.8, 6])
-      .on("zoom", (event) => setGlobeK(event.transform.k));
+    const countriesGroup = new THREE.Group();
+    const overlayGroup = new THREE.Group();
+    scene.add(countriesGroup);
+    scene.add(overlayGroup);
 
-    sel.call(dragBehavior);
-    sel.call(zoomBehavior);
-    sel.on("dblclick.zoom", null);
-    return () => {
-      sel.on(".drag", null);
-      sel.on(".zoom", null);
+    rendererRef.current = renderer;
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+    countriesGroupRef.current = countriesGroup;
+    overlayGroupRef.current = overlayGroup;
+
+    // --- interaction handlers ---
+    const raycaster = new THREE.Raycaster();
+    let dragging = false;
+    let moved = 0;
+    let lastX = 0;
+    let lastY = 0;
+
+    const castAt = (clientX: number, clientY: number) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(ndc, camera);
+      const personsHit = raycaster.intersectObjects([...personSpritesRef.current.values()], false);
+      const countryHit = raycaster.intersectObjects(countryMeshesRef.current.map((c) => c.mesh), false);
+      return { personsHit, countryHit };
     };
-  }, [globeK]);
 
-  const isVisible = (lng: number, lat: number) =>
-    geoDistance([lng, lat], [-rotation[0], -rotation[1]]) < Math.PI / 2;
+    const onPointerDown = (e: PointerEvent) => {
+      dragging = true;
+      moved = 0;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      tweenToken.current++; // grabbing interrupts any in-flight camera tween
+      try { renderer.domElement.setPointerCapture(e.pointerId); } catch { /* synthetic/idle pointer */ }
+    };
 
-  const personById = useMemo(
-    () => new Map(persons.map((p) => [p.id, p])),
-    [persons]
-  );
+    const onPointerMove = (e: PointerEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) setCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      if (dragging) {
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        moved += Math.abs(dx) + Math.abs(dy);
+        lastX = e.clientX;
+        lastY = e.clientY;
+        const cam = camRef.current;
+        // drag right swings the world left (camera moves right around the
+        // focus); drag up raises the camera elevation
+        cam.az += dx * 0.0055;
+        cam.el = Math.max(-1.45, Math.min(1.5, cam.el - dy * 0.0055));
+        return;
+      }
+      const { personsHit, countryHit } = castAt(e.clientX, e.clientY);
+      const name = countryHit[0] ? (countryHit[0].object.userData.name as string) : null;
+      setHoveredCountry(name);
+      renderer.domElement.style.cursor = personsHit[0] || countryHit[0] ? "pointer" : "grab";
+    };
 
-  // De-overlap: persons sharing (nearly) identical coordinates fan out into a ring.
+    const onPointerUp = (e: PointerEvent) => {
+      dragging = false;
+      try { renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      if (moved > 6) return; // it was a drag, not a click
+      const { personsHit, countryHit } = castAt(e.clientX, e.clientY);
+      if (personsHit[0]) {
+        onSelect(personsHit[0].object.userData.id as number);
+        return;
+      }
+      if (countryHit[0]) {
+        const name = countryHit[0].object.userData.name as string;
+        if (name) onCountryClick?.(name);
+        return;
+      }
+      onBackgroundClick?.();
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      tweenToken.current++;
+      const cam = camRef.current;
+      // keep the camera comfortably outside the globe when orbiting the whole
+      // world; allow close zoom only around a focused surface point
+      const minD = focusRef.current.length() < 0.5 ? 1.55 : 0.12;
+      // smooth, gradual zoom: accumulate the target distance and ease toward
+      // it over a short animation instead of jumping per wheel event; clamp
+      // per-event delta so trackpad bursts can't lurch the camera
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 33; // line-mode wheels
+      if (e.deltaMode === 2) dy *= 300; // page-mode wheels
+      dy = Math.max(-120, Math.min(120, dy));
+      const zooming = zoomToken.current > 0 ? zoomAnim.current : null;
+      const current = zooming ? zooming.to : (flyDistTarget.current ?? cam.dist);
+      flyDistTarget.current = null; // wheel now owns the distance
+      const to = Math.max(minD, Math.min(40, current * Math.exp(dy * 0.0009)));
+      if (Math.abs(to - cam.dist) < 1e-6) return;
+      const token = ++zoomToken.current;
+      const from = cam.dist;
+      zoomAnim.current = { from, to };
+      const t0 = performance.now();
+      const dur = 280;
+      const step = () => {
+        if (zoomToken.current !== token) return;
+        const u = Math.min(1, (performance.now() - t0) / dur);
+        const ee = 1 - Math.pow(1 - u, 3); // easeOutCubic
+        camRef.current = { ...camRef.current, dist: from + (to - from) * ee };
+        if (u < 1) requestAnimationFrame(step);
+        else zoomAnim.current = null;
+      };
+      requestAnimationFrame(step);
+    };
+
+    const dom = renderer.domElement;
+    dom.addEventListener("pointerdown", onPointerDown);
+    dom.addEventListener("pointermove", onPointerMove);
+    dom.addEventListener("pointerup", onPointerUp);
+    dom.addEventListener("wheel", onWheel, { passive: false });
+
+    // render loop
+    let raf = 0;
+    const loop = () => {
+      const cam = camRef.current;
+      const focus = focusRef.current;
+      const off = new THREE.Vector3(
+        Math.sin(cam.az) * Math.cos(cam.el),
+        Math.sin(cam.el),
+        Math.cos(cam.az) * Math.cos(cam.el)
+      ).multiplyScalar(cam.dist);
+      camera.position.copy(focus).add(off);
+      // country camera mode reads like a map: roll the camera so the focus
+      // point's local north points to the top of the screen. The whole-world
+      // view keeps its default orientation.
+      const up = new THREE.Vector3(0, 1, 0);
+      if (focus.lengthSq() > 0.25) {
+        const view = off.clone().multiplyScalar(-1 / cam.dist); // camera -> focus
+        up.addScaledVector(view, -up.dot(view));
+        if (up.lengthSq() < 1e-4) {
+          // essentially over the pole: anchor screen-up to the meridian at lng 0
+          up.set(0, 0, -1).addScaledVector(view, view.z);
+        }
+        up.normalize();
+      }
+      camera.up.copy(up);
+      camera.lookAt(focus);
+      // shift the camera right so the focus point lands centered in the area
+      // left of the UI panel — self-correcting: project the focus, measure the
+      // error against the visible-strip center, translate by exactly that
+      const obs = obscuredRightRef.current;
+      if (obs > 0) {
+        const cw = renderer.domElement.clientWidth || 1;
+        camera.updateMatrixWorld(true);
+        const ndc = focus.clone().project(camera);
+        const err = ndc.x - (-obs / cw); // strip center in NDC
+        const hfov = 2 * Math.atan(Math.tan((FOV / 2) * DEG) * camera.aspect);
+        camera.translateX(err * Math.tan(hfov / 2) * cam.dist);
+      }
+      // traveling pulse along each selected-person arc
+      const t = performance.now() / 1000;
+      for (const p of pulsesRef.current) {
+        const u = (t * 0.45 + p.offset) % 1;
+        p.sprite.position.copy(p.curve.getPoint(u));
+      }
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      dom.removeEventListener("pointerdown", onPointerDown);
+      dom.removeEventListener("pointermove", onPointerMove);
+      dom.removeEventListener("pointerup", onPointerUp);
+      dom.removeEventListener("wheel", onWheel);
+      renderer.dispose();
+      el.removeChild(dom);
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
+      countriesGroupRef.current = null;
+      overlayGroupRef.current = null;
+      countryMeshesRef.current = [];
+      personSpritesRef.current.clear();
+      pulsesRef.current = [];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resize / panel occlusion.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !camera) return;
+    renderer.setSize(size.w, size.h);
+    camera.aspect = size.w / size.h;
+    camera.updateProjectionMatrix();
+  }, [size, obscuredRight]);
+
+  // Recompute the overview distance when the viewport changes.
+  useEffect(() => {
+    const d = overviewDist(size.w, size.h);
+    desiredOverview.current = { ...desiredOverview.current, dist: d };
+    if (!selectedCountry && selectedId == null && !focusRequest) {
+      camRef.current.dist = d;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
+
+  // Build country meshes + outlines.
+  useEffect(() => {
+    const group = countriesGroupRef.current;
+    if (!group) return;
+    group.clear();
+    countryMeshesRef.current = [];
+    const entries: { mesh: THREE.Mesh; outlines: THREE.LineLoop[]; name: string }[] = [];
+    for (const f of countries) {
+      const name = f.properties?.name ?? "";
+      const polys: [number, number][][][] =
+        f.geometry.type === "Polygon"
+          ? [f.geometry.coordinates as [number, number][][]]
+          : f.geometry.type === "MultiPolygon"
+            ? (f.geometry.coordinates as [number, number][][][])
+            : [];
+      const positions: number[] = [];
+      const outlineRings: THREE.Vector3[][] = [];
+      const idx: number[] = [];
+      for (const poly of polys) {
+        // earcut input for this polygon: flat [lng,lat,...] + hole start indices
+        const flat: number[] = [];
+        const holes: number[] = [];
+        const base = positions.length / 3;
+        for (let ri = 0; ri < poly.length; ri++) {
+          const unwrapped = unwrapRing(poly[ri]);
+          if (ri > 0) holes.push(positions.length / 3 - base);
+          outlineRings.push(unwrapped.map(([lng, lat]) => toVec3(lng, lat, SURFACE)));
+          for (const [lng, lat] of unwrapped) {
+            const v = toVec3(lng, lat, SURFACE);
+            positions.push(v.x, v.y, v.z);
+            flat.push(lng, lat);
+          }
+        }
+        const tri = earcut(flat, holes, 2);
+        for (let t = 0; t < tri.length; t++) idx.push(base + tri[t]);
+      }
+      if (idx.length === 0) continue;
+      // Subdivide every triangle until all edges are < ~1° of arc, so each
+      // triangle's flat face hugs the sphere (long chords would sag below the
+      // ocean surface and show through as pale streaks/patches).
+      const posArr = positions.slice();
+      const midCache = new Map<string, number>();
+      const midpoint = (a: number, b: number): number => {
+        const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+        let m = midCache.get(key);
+        if (m == null) {
+          const x = posArr[a * 3] + posArr[b * 3];
+          const y = posArr[a * 3 + 1] + posArr[b * 3 + 1];
+          const z = posArr[a * 3 + 2] + posArr[b * 3 + 2];
+          const n = Math.hypot(x, y, z) || 1;
+          m = posArr.length / 3;
+          posArr.push((x / n) * SURFACE, (y / n) * SURFACE, (z / n) * SURFACE);
+          midCache.set(key, m);
+        }
+        return m;
+      };
+      const chord = (a: number, b: number): number => {
+        const dx = posArr[a * 3] - posArr[b * 3];
+        const dy = posArr[a * 3 + 1] - posArr[b * 3 + 1];
+        const dz = posArr[a * 3 + 2] - posArr[b * 3 + 2];
+        return Math.hypot(dx, dy, dz);
+      };
+      const EDGE_LIMIT = 1.0 * DEG; // radians of arc (chord ≈ angle at small angles)
+      let tris = idx;
+      for (let iter = 0; iter < 10; iter++) {
+        const next: number[] = [];
+        let splitAny = false;
+        for (let t = 0; t < tris.length; t += 3) {
+          const a = tris[t], b = tris[t + 1], c = tris[t + 2];
+          const tooLong = (p: number, q: number) => {
+            const ang = 2 * Math.asin(Math.min(1, chord(p, q) / (2 * SURFACE)));
+            return ang > EDGE_LIMIT;
+          };
+          if (!tooLong(a, b) && !tooLong(b, c) && !tooLong(c, a)) {
+            next.push(a, b, c);
+            continue;
+          }
+          splitAny = true;
+          const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+          next.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+        }
+        tris = next;
+        if (!splitAny) break;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+      geo.setIndex(tris);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: LAND, side: THREE.DoubleSide }));
+      mesh.userData.name = name;
+      const outlines = outlineRings.map(
+        (pts) =>
+          new THREE.LineLoop(
+            new THREE.BufferGeometry().setFromPoints(pts),
+            new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.7 })
+          )
+      );
+      group.add(mesh);
+      for (const o of outlines) group.add(o);
+      entries.push({ mesh, outlines, name });
+    }
+    countryMeshesRef.current = entries;
+  }, [countries]);
+
+  // Country tint: hover + selected.
+  useEffect(() => {
+    for (const { mesh, outlines, name } of countryMeshesRef.current) {
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      if (name === selectedCountry) mat.color.set(SELECTED);
+      else if (name === hoveredCountry) mat.color.set(HOVER);
+      else mat.color.set(LAND);
+      const active = name === selectedCountry || name === hoveredCountry;
+      for (const o of outlines) {
+        const om = o.material as THREE.LineBasicMaterial;
+        om.color.set(active ? RED : INK);
+        om.opacity = active ? 1 : 0.7;
+      }
+    }
+  }, [hoveredCountry, selectedCountry, countries]);
+
+  // Person de-overlap: persons sharing (nearly) identical coordinates fan out into a ring.
   const displayPos = useMemo(() => {
     const groups = new Map<string, PersonDto[]>();
     for (const p of persons) {
@@ -151,303 +907,297 @@ export default function WorldMap({
         continue;
       }
       const latRad = (g[0].lat * Math.PI) / 180;
-      const baseRing = Math.min(6, 3 + g.length * 0.6);
-      const radius = baseRing / Math.max(1, Math.sqrt(globeK));
       g.forEach((p, i) => {
         const angle = (2 * Math.PI * i) / g.length - Math.PI / 2;
         pos.set(p.id, {
-          lat: g[0].lat + radius * Math.sin(angle),
-          lng: g[0].lng + (radius * Math.cos(angle)) / Math.max(0.3, Math.cos(latRad)),
+          lat: g[0].lat + 5 * Math.sin(angle),
+          lng: g[0].lng + (5 * Math.cos(angle)) / Math.max(0.3, Math.cos(latRad)),
         });
       });
     }
     return pos;
-  }, [persons, globeK]);
+  }, [persons]);
 
-  const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng };
+  // Build overlays: persons, arcs, markers, heat loops.
+  useEffect(() => {
+    const group = overlayGroupRef.current;
+    if (!group) return;
+    group.clear();
+    personSpritesRef.current.clear();
+    pulsesRef.current = [];
 
-  // Arcs only for the selected person — thin curves lifted above the surface.
-  const arcs = useMemo(() => {
-    if (selectedId == null) return [];
-    const out: { id: number; d: string }[] = [];
-    for (const c of connections) {
-      if (c.personAId !== selectedId && c.personBId !== selectedId) continue;
-      // Draw the arc STARTING at the selected person so the traveling light
-      // pulses outward from them toward their ties.
-      const from = personById.get(selectedId);
-      const other = personById.get(c.personAId === selectedId ? c.personBId : c.personAId);
-      if (!from || !other) continue;
-      const pa = posOf(from);
-      const pb = posOf(other);
-      // Hide the arc when either endpoint sits behind the globe's horizon,
-      // matching how the square markers disappear on the far side.
-      if (!isVisible(pa.lng, pa.lat) || !isVisible(pb.lng, pb.lat)) continue;
-      const sa = projection([pa.lng, pa.lat]);
-      const sb = projection([pb.lng, pb.lat]);
-      if (!sa || !sb) continue;
-      const mx = (sa[0] + sb[0]) / 2;
-      const my = (sa[1] + sb[1]) / 2;
-      const cx = size.w / 2;
-      const cy = size.h / 2;
-      // Control point pushed outward from globe center → arc lifts off the surface.
-      const lift = 1.18;
-      const qx = cx + (mx - cx) * lift;
-      const qy = cy + (my - cy) * lift;
-      out.push({ id: c.id, d: `M${sa[0]},${sa[1]} Q${qx},${qy} ${sb[0]},${sb[1]}` });
+    const personById = new Map(persons.map((p) => [p.id, p]));
+    const posOf = (p: PersonDto) => displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng };
+
+    // persons — ink squares with glow + name
+    for (const p of persons) {
+      const dp = posOf(p);
+      const sp = makeLabelSprite(p.name, p.id === selectedId ? RED : INK, { square: true, glow: p.id === selectedId ? RED : INK, fontSize: 26 });
+      sp.position.copy(toVec3(dp.lng, dp.lat, 1.004));
+      sp.userData.id = p.id;
+      group.add(sp);
+      personSpritesRef.current.set(p.id, sp);
     }
-    return out;
+
+    // connection arcs + traveling pulse for the selected person
+    if (selectedId != null) {
+      const from = personById.get(selectedId);
+      if (from) {
+        const pa = posOf(from);
+        const A = toVec3(pa.lng, pa.lat, SURFACE);
+        let i = 0;
+        for (const c of connections) {
+          if (c.personAId !== selectedId && c.personBId !== selectedId) continue;
+          const other = personById.get(c.personAId === selectedId ? c.personBId : c.personAId);
+          if (!other) continue;
+          const pb = posOf(other);
+          const B = toVec3(pb.lng, pb.lat, SURFACE);
+          const angle = A.angleTo(B);
+          const M = A.clone().add(B).normalize().multiplyScalar(1 + 0.25 * angle);
+          const curve = new THREE.QuadraticBezierCurve3(A, M, B);
+          const lineGeo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(64));
+          group.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: RED, transparent: true, opacity: 0.9 })));
+          // white glowing pulse traveling from the selected person outward
+          const pulse = new THREE.Sprite(new THREE.SpriteMaterial({ color: "#ffffff", depthTest: false, transparent: true, opacity: 0.95 }));
+          pulse.scale.set(0.03, 0.03, 1);
+          pulse.renderOrder = 11;
+          group.add(pulse);
+          pulsesRef.current.push({ curve, sprite: pulse, offset: (i * 0.37) % 1 });
+          i++;
+        }
+      }
+    }
+
+    // resource markers — squares with name labels
+    for (const m of markers ?? []) {
+      const mk = m.color ?? (m.kind === "refinery" ? "#0f766e" : RED);
+      const pos = toVec3(m.lng, m.lat, 1.004);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.02), new THREE.MeshBasicMaterial({ color: mk }));
+      box.position.copy(pos);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ color: mk, transparent: true, opacity: 0.22, depthTest: false }));
+      glow.scale.set(0.07, 0.07, 1);
+      glow.position.copy(pos);
+      const label = makeLabelSprite(m.name, INK, { fontSize: 22 });
+      label.position.copy(pos).add(new THREE.Vector3(0, 0.05, 0));
+      group.add(box, glow, label);
+    }
+
+    // heat loops — dashed great-circle-ish loops with name labels
+    for (const h of heat ?? []) {
+      const C = toVec3(h.lng, h.lat, 1);
+      const east = new THREE.Vector3(0, 1, 0).cross(C).normalize();
+      const north = C.clone().cross(east).normalize();
+      const rot = h.rot * DEG;
+      const pts: THREE.Vector3[] = [];
+      const N = 40;
+      const src: [number, number][] = h.poly ?? Array.from({ length: N }, (_, k) => {
+        const a = (k / N) * Math.PI * 2;
+        return [h.lng + h.rx * Math.cos(a), h.lat + h.ry * Math.sin(a)];
+      });
+      for (const [lon, lat] of src) {
+        const dLng = (lon - h.lng) * DEG;
+        const dLat = (lat - h.lat) * DEG;
+        const dir = east.clone().multiplyScalar(dLng * Math.cos(rot) - dLat * Math.sin(rot))
+          .add(north.clone().multiplyScalar(dLng * Math.sin(rot) + dLat * Math.cos(rot)));
+        pts.push(C.clone().add(dir).normalize().multiplyScalar(1.004));
+      }
+      const loop = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineDashedMaterial({ color: h.color, dashSize: 0.02, gapSize: 0.016, transparent: true, opacity: 0.85 })
+      );
+      loop.computeLineDistances();
+      group.add(loop);
+      const label = makeLabelSprite(h.name, h.color, { fontSize: 24 });
+      label.position.copy(C).multiplyScalar(1.03).add(north.clone().multiplyScalar(h.ry * DEG + 0.03));
+      group.add(label);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, connections, personById, projection, displayPos, size]);
+  }, [persons, connections, selectedId, markers, heat, displayPos]);
 
-  // Smoothly rotate/zoom the globe to face a clicked country.
-  const focusAnim = useRef<number | null>(null);
+  // Person highlight sizing.
+  useEffect(() => {
+    for (const [id, sp] of personSpritesRef.current) {
+      const active = id === selectedId || (highlightIds?.has(id) ?? false);
+      const base = 0.062;
+      const img = sp.material.map!.image as HTMLCanvasElement;
+      sp.scale.set((img.width / img.height) * base * (active ? 1.25 : 1), base * (active ? 1.25 : 1), 1);
+    }
+  }, [highlightIds, selectedId, persons]);
 
-  const focusPoint = (lng: number, lat: number, targetK = 2.6) => {
-    const targetRot: [number, number, number] = [-lng, -lat, 0];
-    const startRot = rotation;
-    // shortest rotation path in longitude
-    let dLng = targetRot[0] - startRot[0];
-    dLng = ((dLng + 540) % 360) - 180;
-    const startK = globeK;
+  // ---- camera director: the camera is a pure function of app state ----
+  const flyTo = (target: { az: number; el: number; dist: number; focus: THREE.Vector3 }, dur = 900) => {
+    zoomToken.current++; // cancel any in-flight wheel-zoom
+    zoomAnim.current = null;
+    const token = ++tweenToken.current;
+    const from = { ...camRef.current, focus: focusRef.current.clone() };
+    let dAz = target.az - from.az;
+    dAz = ((dAz + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     const t0 = performance.now();
-    const dur = 800;
-    if (focusAnim.current) cancelAnimationFrame(focusAnim.current);
-    const step = (t: number) => {
-      const u = Math.min(1, (t - t0) / dur);
-      const e = 1 - Math.pow(1 - u, 3); // easeOutCubic
-      setRotation([
-        startRot[0] + dLng * e,
-        startRot[1] + (targetRot[1] - startRot[1]) * e,
-        0,
-      ]);
-      setGlobeK(startK + (targetK - startK) * e);
-      if (u < 1) focusAnim.current = requestAnimationFrame(step);
+    flyDistTarget.current = target.dist;
+    const step = () => {
+      if (tweenToken.current !== token) return;
+      const u = Math.min(1, (performance.now() - t0) / dur);
+      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; // easeInOutCubic
+      camRef.current = {
+        az: from.az + dAz * e,
+        el: from.el + (target.el - from.el) * e,
+        dist: from.dist + (target.dist - from.dist) * e,
+      };
+      focusRef.current.copy(from.focus).lerp(target.focus, e);
+      if (u < 1) requestAnimationFrame(step);
+      else flyDistTarget.current = null;
     };
-    focusAnim.current = requestAnimationFrame(step);
+    requestAnimationFrame(step);
   };
 
-  const focusCountry = (f: CountryFeature) => {
-    const [lng, lat] = geoCentroid(f as never);
-    focusPoint(lng, lat);
-  };
+  const countryByName = useMemo(
+    () => new Map(countries.map((c) => [c.properties?.name ?? "", c])),
+    [countries]
+  );
+
+  // Cropland layer: place the neon cornfield on the country's major growing
+  // regions whenever the Food & Agriculture tab is active.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (croplandGroupRef.current) {
+      scene.remove(croplandGroupRef.current);
+      croplandGroupRef.current = null;
+    }
+    croplandCountRef.current = 0;
+    if (!cropland) return;
+    const f = countryByName.get(cropland);
+    if (!f) return;
+    const token = ++croplandToken.current;
+    let cancelled = false;
+    (async () => {
+      const [grid, proto] = await Promise.all([loadCroplandGrid(), loadCornfield()]);
+      if (cancelled || croplandToken.current !== token) return;
+      const regions = croplandRegions(f, grid);
+      croplandCountRef.current = regions.length;
+      if (regions.length === 0) return;
+      const [clng, clat] = geoCentroid(f as never);
+      const countryRadiusDeg = angularRadius(f, [clng, clat]) / DEG;
+      const group = new THREE.Group();
+      // One stalk size per country: small nations get small stalks, but every
+      // stalk inside a country shares the same scale. Larger regions are
+      // shown with MORE stalks, never bigger ones.
+      const stalkScale = Math.min(
+        0.03,
+        Math.max(0.004, countryRadiusDeg * DEG * R * 0.18)
+      );
+      const stalkH = 2.0 * stalkScale; // GLB stalk is ~2 units tall
+      const rng = mulberry32(hashName(f.properties.name));
+      for (const reg of regions) {
+        const rWorld = reg.radiusDeg * DEG * R;
+        const ground = stalkH * 0.85;
+        // density target from region area; slight overlap allowed, capped both
+        // for perf and by how many real cropland cells the region has
+        const nTarget = Math.max(
+          3,
+          Math.min(64, Math.round((2.6 * Math.PI * rWorld * rWorld) / (ground * ground)))
+        );
+        const chosen = sampleCells(reg.pts, Math.min(nTarget, reg.pts.length), rng);
+        for (const cell of chosen) {
+          const inst = proto.clone(true);
+          const pos = toVec3(cell.lng, cell.lat, R * 1.004);
+          const up = pos.clone().normalize();
+          const north = new THREE.Vector3(0, 1, 0).addScaledVector(up, -up.y);
+          if (north.lengthSq() < 1e-6) north.set(0, 0, -1).addScaledVector(up, up.z);
+          north.normalize();
+          const east = new THREE.Vector3().crossVectors(north, up).normalize();
+          const zed = new THREE.Vector3().crossVectors(east, up).normalize();
+          inst.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, up, zed));
+          inst.rotateY(rng() * Math.PI * 2); // random lean direction
+          inst.scale.setScalar(stalkScale);
+          inst.position.copy(pos);
+          group.add(inst);
+        }
+      }
+      scene.add(group);
+      croplandGroupRef.current = group;
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cropland, countryByName]);
 
   useEffect(() => {
-    if (focusRequest) focusPoint(focusRequest.lng, focusRequest.lat, 3.2);
+    const dOv = overviewDist(size.w, size.h);
+    if (selectedCountry) {
+      const f = countryByName.get(selectedCountry);
+      if (f) {
+        const [lng, lat] = geoCentroid(f as never);
+        const c = toVec3(lng, lat, R);
+        lastCountryPoint.current = c;
+        const view = countryView(f as CountryFeature, [lng, lat]);
+        flyTo({ az: view.az, el: view.el, dist: view.dist, focus: view.focus }, 900);
+        return;
+      }
+    }
+    if (focusRequest) {
+      const c = toVec3(focusRequest.lng, focusRequest.lat, R);
+      flyTo({ az: azOf(c), el: elOf(c), dist: 0.5, focus: c }, 900);
+      return;
+    }
+    if (selectedId != null) {
+      const p = persons.find((pp) => pp.id === selectedId);
+      if (p) {
+        const dp = displayPos.get(p.id) ?? { lat: p.lat, lng: p.lng };
+        const c = toVec3(dp.lng, dp.lat, R);
+        flyTo({ az: azOf(c), el: elOf(c), dist: 0.45, focus: c }, 900);
+        return;
+      }
+    }
+    // overview: face the last-focused country (or the default view)
+    const c = lastCountryPoint.current;
+    if (c) flyTo({ az: azOf(c), el: elOf(c), dist: dOv, focus: new THREE.Vector3(0, 0, 0) }, 900);
+    else flyTo({ az: 0.65, el: 0.52, dist: dOv, focus: new THREE.Vector3(0, 0, 0) }, 900);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusRequest?.nonce]);
+  }, [selectedCountry, selectedId, focusRequest?.nonce, countryByName, persons, displayPos, size]);
 
-  const spherePath =
-    pathGen({ type: "Sphere" } as unknown as GeoJSON.Feature) ?? "";
-  const graticulePath = pathGen({ type: "Feature", geometry: { type: "MultiLineString", coordinates: geoGraticule10() }, properties: {} } as never) ?? "";
+  // debug handle for the in-app browser tests (harmless in production)
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__worldmap = {
+      getCam: () => ({ ...camRef.current, focus: focusRef.current.toArray(), mode: selectedCountry ? "country" : "free" }),
+      getRotation: () => {
+        const c = camRef.current;
+        return [c.az / DEG, c.el / DEG, c.dist];
+      },
+      getGlobeK: () => camRef.current.dist,
+      getTilt: () => camRef.current.el / DEG,
+      getSelected: () => selectedCountry ?? null,
+      getCountryCount: () => countryMeshesRef.current.length,
+      getCropland: () => croplandCountRef.current,
+      getScene: () => sceneRef.current,
+      setLayerVisible: (layer: string, visible: boolean) => {
+        const groups: Record<string, (THREE.Object3D | null)[]> = {
+          sphere: sceneRef.current ? [sceneRef.current.children[0]] : [],
+          rim: sceneRef.current ? [sceneRef.current.children[1]] : [],
+          graticule: sceneRef.current ? [sceneRef.current.children[2]] : [],
+          countries: [countriesGroupRef.current],
+          overlay: [overlayGroupRef.current],
+        };
+        for (const g of groups[layer] ?? []) if (g) g.visible = visible;
+      },
+      project: (lng: number, lat: number) => {
+        const cam = cameraRef.current;
+        const renderer = rendererRef.current;
+        if (!cam || !renderer) return null;
+        const v = toVec3(lng, lat, SURFACE).project(cam);
+        const rect = renderer.domElement.getBoundingClientRect();
+        return {
+          x: rect.left + ((v.x + 1) / 2) * rect.width,
+          y: rect.top + ((-v.y + 1) / 2) * rect.height,
+          behind: v.z > 1,
+        };
+      },
+    };
+  });
 
   return (
     <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#f4f1ea]">
-      <div className="relative h-full w-full">
-        <svg
-          ref={svgRef}
-          width={size.w}
-          height={size.h}
-          className="block cursor-grab active:cursor-grabbing"
-          onMouseMove={(e) => {
-            const rect = containerRef.current?.getBoundingClientRect();
-            if (rect) setCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-          }}
-          onClick={(e) => {
-            if (e.target === svgRef.current) onBackgroundClick?.();
-          }}
-        >
-          {/* ocean sphere */}
-          <path d={spherePath} fill={CREAM} stroke={INK} strokeWidth={1} />
-          {/* graticule — the reference's signature wireframe */}
-          <path d={graticulePath} fill="none" stroke={INK_SOFT} strokeWidth={0.4} strokeOpacity={0.55} />
-          {/* countries: ink outlines, cream fill; hover/selected tint */}
-          {countries.map((c, i) => {
-            const name = c.properties?.name ?? "";
-            const hovered = hoveredCountry === name;
-            const selected = selectedCountry === name;
-            const d = pathGen(c as never);
-            if (!d) return null;
-            return (
-              <path
-                key={c.id ?? i}
-                d={d}
-                fill={selected ? "#e8c8c8" : hovered ? "#f0d5d5" : LAND}
-                stroke={hovered || selected ? RED : INK}
-                strokeWidth={hovered || selected ? 1 : 0.45}
-                strokeOpacity={hovered || selected ? 1 : 0.7}
-                className="cursor-pointer"
-                style={{ transition: "fill 150ms" }}
-                onMouseEnter={() => setHoveredCountry(name)}
-                onMouseLeave={() => setHoveredCountry(null)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (name) {
-                    focusCountry(c);
-                    onCountryClick?.(name);
-                  }
-                }}
-              >
-                <title>{name}</title>
-              </path>
-            );
-          })}
-
-          {/* basin/shale outlines — dashed great-circle loops traced on the sphere */}
-          {(heat ?? []).map((h, i) => {
-            // deterministic per-name jitter so ellipse-based loops look hand-drawn
-            let hash = 0;
-            for (const ch of h.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-            const rand = (k: number) => { const x = Math.sin(hash + k * 127.1) * 43758.5453; return x - Math.floor(x); };
-            const pts: [number, number][] = [];
-            let vis = 0;
-            if (h.poly) {
-              for (const [lon, lat] of h.poly) { if (isVisible(lon, lat)) vis++; pts.push([lon, lat]); }
-              pts.push(h.poly[0]);
-            } else {
-              const N = 26;
-              const rot = (h.rot * Math.PI) / 180;
-              const c = Math.cos(rot), sn = Math.sin(rot);
-              for (let k = 0; k <= N; k++) {
-                const a = (k / N) * Math.PI * 2;
-                const j = 0.78 + 0.44 * rand(k); // wobble radius per vertex
-                const dlon = h.rx * j * Math.cos(a);
-                const dlat = h.ry * j * Math.sin(a);
-                const lon = h.lng + (dlon * c - dlat * sn) / Math.max(0.3, Math.cos((h.lat * Math.PI) / 180));
-                const lat = Math.max(-89, Math.min(89, h.lat + (dlon * sn + dlat * c)));
-                if (isVisible(lon, lat)) vis++;
-                pts.push([lon, lat]);
-              }
-            }
-            if (vis < pts.length * 0.4) return null; // mostly behind the horizon — skip
-            const dOuter = geoPath(projection)({ type: "LineString", coordinates: pts });
-            const cpt = projection([h.lng, h.lat]) as [number, number] | null;
-            if (!dOuter || !cpt) return null;
-            const sc = projection.scale() / 55;
-            const ey = h.ry * sc;
-            return (
-              <g key={`heat-${i}`} className="pointer-events-none">
-                <path d={dOuter} fill={h.color} fillOpacity={0.06} stroke={h.color} strokeWidth={1.4} strokeDasharray="6 5" strokeOpacity={0.85} />
-                {isVisible(h.lng, h.lat) && (
-                  <text x={cpt[0]} y={cpt[1] - ey - 8} textAnchor="middle" fontSize={10} fontWeight={700} fill={h.color} style={{ textShadow: "0 0 4px #f4f1ea, 0 0 4px #f4f1ea" }}>
-                    {h.name}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {/* resource markers — geolocated squares, hidden behind the horizon */}
-          {(markers ?? []).map((m, i) => {
-            if (!isVisible(m.lng, m.lat)) return null;
-            const pt = projection([m.lng, m.lat]) as [number, number] | null;
-            if (!pt) return null;
-            const mk = m.color ?? (m.kind === "refinery" ? "#0f766e" : RED);
-            return (
-              <g key={`mk-${i}`} transform={`translate(${pt[0]},${pt[1]})`} className="pointer-events-none">
-                <circle r={7} fill={mk} opacity={0.22} style={{ filter: "blur(3px)" }} />
-                {m.kind === "refinery" ? (
-                  <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)" fill={mk} stroke="#fff" strokeWidth={1} />
-                ) : (
-                  <rect x={-4} y={-4} width={8} height={8} fill={mk} stroke="#fff" strokeWidth={1} />
-                )}
-                <text y={-8} textAnchor="middle" fontSize={9} fill={INK} fontWeight={600}>
-                  {m.name}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* connection arcs — only the selected person's ties */}
-          {arcs.map((a) => (
-            <g key={a.id}>
-              <path
-                d={a.d}
-                fill="none"
-                stroke={RED}
-                strokeWidth={1.6}
-                strokeOpacity={0.9}
-              />
-              {/* white illuminating pulse traveling from the selected person
-                  along each tie to the people they're connected to */}
-              <path
-                d={a.d}
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeDasharray="14 260"
-                style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.95))" }}
-              >
-                <animate
-                  attributeName="stroke-dashoffset"
-                  from="274"
-                  to="0"
-                  dur="2.4s"
-                  repeatCount="indefinite"
-                />
-              </path>
-            </g>
-          ))}
-
-          {/* person dots — ink squares with a soft glow, red when selected */}
-          {persons.map((p) => {
-            const dp = posOf(p);
-            if (!isVisible(dp.lng, dp.lat)) return null;
-            const pt = projection([dp.lng, dp.lat]) as [number, number] | null;
-            if (!pt) return null;
-            const selected = p.id === selectedId;
-            const highlighted = (highlightIds?.has(p.id) ?? false) || hoveredPerson === p.id;
-            const r = selected ? 6 : highlighted ? 5 : 4;
-            const color = selected ? RED : INK;
-            return (
-              <g
-                key={p.id}
-                transform={`translate(${pt[0]},${pt[1]})`}
-                className="cursor-pointer"
-                onMouseEnter={() => setHoveredPerson(p.id)}
-                onMouseLeave={() => setHoveredPerson(null)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  focusPoint(dp.lng, dp.lat, 3.4);
-                  onSelect(p.id);
-                }}
-              >
-                {/* soft glow halo */}
-                <circle
-                  r={r + 7}
-                  fill={color}
-                  opacity={selected ? 0.28 : 0.14}
-                  style={{ filter: "blur(3px)" }}
-                />
-                <rect
-                  x={-r}
-                  y={-r}
-                  width={r * 2}
-                  height={r * 2}
-                  fill={color}
-                  style={{ transition: "all 150ms" }}
-                />
-                <text
-                  y={-r - 8}
-                  textAnchor="middle"
-                  fill={selected ? RED : INK}
-                  fontSize={selected ? 13 : 11}
-                  fontWeight={selected ? 800 : 600}
-                  style={{
-                    paintOrder: "stroke",
-                    stroke: CREAM,
-                    strokeWidth: 3,
-                    pointerEvents: "none",
-                    userSelect: "none",
-                  }}
-                >
-                  {p.name}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
       {/* floating country name label follows the cursor */}
       {hoveredCountry && cursor && (
         <div
