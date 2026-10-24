@@ -14,6 +14,10 @@ export type CountryPanelProps = {
   onShowCropland?: (countryName: string | null) => void;
 };
 
+// remembers the last main tab across panel unmounts (country > ocean > country)
+type MainTab = "demographics" | "economics" | "inputs";
+let lastTab: MainTab = "demographics";
+
 type EntityItem = {
   name: string;
   summary: string;
@@ -217,7 +221,11 @@ export default function CountryPanel({
 }: CountryPanelProps) {
   const companies = collectEntities(persons, "companies");
   const parties = collectEntities(persons, "parties");
-  const [tab, setTab] = useState<"demographics" | "economics" | "inputs">("demographics");
+  const [tab, setTabState] = useState<MainTab>(lastTab);
+  const setTab = (t: MainTab) => {
+    lastTab = t;
+    setTabState(t);
+  };
 
   return (
     <aside className="pointer-events-auto absolute right-0 top-0 z-20 flex h-full w-full max-w-md flex-col border-l border-[#e3c4c4] bg-white/95 shadow-2xl backdrop-blur">

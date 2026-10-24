@@ -14,6 +14,8 @@ const PALETTE = ["#b91c1c", "#ea580c", "#292524", "#ca8a04", "#78716c", "#0f766e
 const color = (i: number) => PALETTE[i % PALETTE.length];
 
 type Sub = "trade" | "labor" | "debt" | "currency" | "land" | "resources";
+// remembers the last sub-tab across panel unmounts (country > ocean > country)
+let lastSub: Sub = "trade";
 
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "trade", label: "Imports & Exports", icon: <ArrowLeftRight size={12} /> },
@@ -182,7 +184,11 @@ function TradePie({
 }
 
 export default function EconomicsTab({ countryName, onShowMines, onShowCropland }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void; onShowCropland?: (countryName: string | null) => void }) {
-  const [sub, setSub] = useState<Sub>("trade");
+  const [sub, setSubState] = useState<Sub>(lastSub);
+  const setSub = (s: Sub) => {
+    lastSub = s;
+    setSubState(s);
+  };
   const e = ECONOMICS[countryName];
 
   return (

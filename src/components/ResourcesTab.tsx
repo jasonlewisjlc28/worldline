@@ -8,6 +8,8 @@ import { POWER_SITES, POWER_REGIONS, POWER_COLORS, type PowerKind } from "../dat
 import { COUNTRY_CENTROIDS } from "../data/centroids";
 
 type Sub = "production" | "food" | "energy";
+// remembers the last sub-tab across panel unmounts (country > ocean > country)
+let lastSub: Sub = "production";
 const SUBS: { id: Sub; label: string; icon: React.ReactNode }[] = [
   { id: "production", label: "Resources & Production", icon: <Mountain size={12} /> },
   { id: "food", label: "Food & Agriculture", icon: <Wheat size={12} /> },
@@ -109,7 +111,11 @@ const GAS_PLAYS = new Set(["Marcellus", "Utica", "Haynesville-Bossier", "Barnett
 const OIL_PLAYS = new Set(["Bakken", "Three Forks", "Eagle Ford", "Wolfcamp", "Wolfcamp - Midland", "Spraberry", "Bone Spring", "Delaware", "Abo-Yeso", "Glorieta-Yeso", "Woodford-Caney", "Niobrara", "Barnett"]);
 
 export default function ResourcesTab({ countryName, onShowMines, onShowCropland }: { countryName: string; onShowMines?: (sites: { name: string; lat: number; lng: number; kind: "mine" | "refinery"; color?: string }[], focus?: [number, number], heat?: { name: string; lat: number; lng: number; rx: number; ry: number; rot: number; color: string; poly?: [number, number][] }[]) => void; onShowCropland?: (countryName: string | null) => void }) {
-  const [sub, setSub] = useState<Sub>("production");
+  const [sub, setSubState] = useState<Sub>(lastSub);
+  const setSub = (s: Sub) => {
+    lastSub = s;
+    setSubState(s);
+  };
   const [mineralSel, setMineralSel] = useState<{ label: string; pct: number } | null>(null);
   const [fuelSel, setFuelSel] = useState<FuelKind | null>(null);
   const [powerSel, setPowerSel] = useState<PowerKind | null>(null);

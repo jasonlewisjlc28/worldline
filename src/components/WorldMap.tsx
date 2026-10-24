@@ -249,6 +249,23 @@ const loadCornfield = () => {
   return cornfieldPromise;
 };
 
+// Holographic load-in for the cornfield layer. Each stalk clones its
+// materials so it can fade in on its own stagger, sweeping south (screen
+// bottom) to north while growing from its base.
+type CornGrowItem = {
+  obj: THREE.Object3D;
+  basePos: THREE.Vector3;
+  up: THREE.Vector3;
+  scale: number;
+  height: number;
+  delay: number; // ms after t0
+  dur: number; // ms
+  seed: number;
+  mats: { m: THREE.Material; target: number; transparent0: boolean }[];
+};
+const CORN_GROW_STAGGER = 1.1; // s, sweep window across the country's latitude
+const CORN_GROW_DUR = 0.55; // s per stalk
+
 type CroplandRegion = {
   lng: number;
   lat: number;
@@ -493,6 +510,7 @@ export default function WorldMap({
   const croplandGroupRef = useRef<THREE.Group | null>(null);
   const croplandToken = useRef(0);
   const croplandCountRef = useRef(0);
+  const cornGrowRef = useRef<{ items: CornGrowItem[]; t0: number } | null>(null);
 
   useEffect(() => {
     fetch("/countries-110m.json")
@@ -659,7 +677,7 @@ export default function WorldMap({
       const zooming = zoomToken.current > 0 ? zoomAnim.current : null;
       const current = zooming ? zooming.to : (flyDistTarget.current ?? cam.dist);
       flyDistTarget.current = null; // wheel now owns the distance
-      const to = Math.max(minD, Math.min(40, current * Math.exp(dy * 0.0009)));
+      const to = Math.max(minD, Math.min(40, current * Math.exp(dy * 0.0018)));
       if (Math.abs(to - cam.dist) < 1e-6) return;
       const token = ++zoomToken.current;
       const from = cam.dist;
@@ -727,6 +745,38 @@ export default function WorldMap({
         const u = (t * 0.45 + p.offset) % 1;
         p.sprite.position.copy(p.curve.getPoint(u));
       }
+      // holographic cornfield load-in: each stalk rises from the ground and
+      // grows bottom-up with a flickering fade, staggered south to north
+      const cg = cornGrowRef.current;
+      if (cg) {
+        const now = performance.now();
+        let settled = 0;
+        for (const it of cg.items) {
+          const p = Math.min(1, Math.max(0, (now - cg.t0 - it.delay) / it.dur));
+          if (p <= 0) {
+            it.obj.visible = false;
+            continue;
+          }
+          it.obj.visible = true;
+          const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
+          // uniform scale about the base: the plant emerges from the ground
+          // at full proportions (squashing only Y would flatten the leaf
+          // cards onto the surface as a dark streak)
+          const g = Math.max(0.02, e);
+          it.obj.scale.set(it.scale * g, it.scale * g, it.scale * g);
+          it.obj.position.copy(it.basePos).addScaledVector(it.up, -(1 - e) * it.height * 0.35);
+          const flick = p < 0.8 ? 0.7 + 0.3 * Math.abs(Math.sin(p * 22 + it.seed)) : 1;
+          for (const rec of it.mats) rec.m.opacity = rec.target * p * flick;
+          if (p >= 1) {
+            for (const rec of it.mats) {
+              rec.m.opacity = rec.target;
+              rec.m.transparent = rec.transparent0;
+            }
+            settled++;
+          }
+        }
+        if (settled === cg.items.length) cornGrowRef.current = null;
+      }
       renderer.render(scene, camera);
       raf = requestAnimationFrame(loop);
     };
@@ -748,6 +798,7 @@ export default function WorldMap({
       countryMeshesRef.current = [];
       personSpritesRef.current.clear();
       pulsesRef.current = [];
+      cornGrowRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1064,6 +1115,7 @@ export default function WorldMap({
       scene.remove(croplandGroupRef.current);
       croplandGroupRef.current = null;
     }
+    cornGrowRef.current = null;
     croplandCountRef.current = 0;
     if (!cropland) return;
     const f = countryByName.get(cropland);
@@ -1088,6 +1140,7 @@ export default function WorldMap({
       );
       const stalkH = 2.0 * stalkScale; // GLB stalk is ~2 units tall
       const rng = mulberry32(hashName(f.properties.name));
+      const placed: { inst: THREE.Object3D; pos: THREE.Vector3; up: THREE.Vector3; lat: number }[] = [];
       for (const reg of regions) {
         const rWorld = reg.radiusDeg * DEG * R;
         const ground = stalkH * 0.85;
@@ -1109,13 +1162,55 @@ export default function WorldMap({
           const zed = new THREE.Vector3().crossVectors(east, up).normalize();
           inst.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, up, zed));
           inst.rotateY(rng() * Math.PI * 2); // random lean direction
-          inst.scale.setScalar(stalkScale);
-          inst.position.copy(pos);
+          // holographic load-in starts as a tiny stalk at the ground, sunk;
+          // the render loop grows it uniformly from its base on its stagger
+          inst.scale.setScalar(stalkScale * 0.02);
+          inst.position.copy(pos).addScaledVector(up, -stalkH * 0.35);
           group.add(inst);
+          placed.push({ inst, pos, up, lat: cell.lat });
         }
       }
+      // Stagger south-first so the field sweeps onto the map bottom-up.
+      let latMin = Infinity;
+      let latMax = -Infinity;
+      for (const p of placed) {
+        latMin = Math.min(latMin, p.lat);
+        latMax = Math.max(latMax, p.lat);
+      }
+      const latSpan = Math.max(1e-6, latMax - latMin);
+      const items: CornGrowItem[] = placed.map((p) => {
+        // per-stalk material clones so the fade can be staggered without
+        // touching the shared cached proto materials
+        const mats: CornGrowItem["mats"] = [];
+        p.inst.traverse((o) => {
+          if (o.name === "wire_cards") return; // outline boxes stay hidden
+          const mo = o as THREE.Mesh;
+          if (!mo.material) return;
+          const list = Array.isArray(mo.material) ? mo.material : [mo.material];
+          const cloned = list.map((m0) => {
+            const m = m0.clone();
+            mats.push({ m, target: m.opacity, transparent0: m.transparent });
+            m.transparent = true;
+            m.opacity = 0;
+            return m;
+          });
+          mo.material = Array.isArray(mo.material) ? cloned : cloned[0];
+        });
+        return {
+          obj: p.inst,
+          basePos: p.pos.clone(),
+          up: p.up.clone(),
+          scale: stalkScale,
+          height: stalkH,
+          delay: ((latMax - p.lat) / latSpan) * CORN_GROW_STAGGER * 1000 + rng() * 180,
+          dur: CORN_GROW_DUR * 1000,
+          seed: rng() * 10,
+          mats,
+        };
+      });
       scene.add(group);
       croplandGroupRef.current = group;
+      cornGrowRef.current = { items, t0: performance.now() };
     })();
     return () => {
       cancelled = true;
