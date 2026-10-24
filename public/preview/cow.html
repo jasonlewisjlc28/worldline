@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neon Cow — 3D Preview</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1117; }
+  #app { width: 100%; height: 100%; }
+  #hud {
+    position: fixed; top: 14px; left: 14px; color: #9fb7c9;
+    font: 13px/1.5 system-ui, sans-serif; user-select: none;
+    background: rgba(13,17,23,.65); padding: 10px 14px; border-radius: 10px;
+    border: 1px solid #1f2b38; backdrop-filter: blur(6px);
+  }
+  #hud b { color: #7ef0c8; }
+  #hud .keys { color: #5b7183; font-size: 12px; }
+  #controls { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; }
+  #controls button {
+    background: #16212e; color: #9fb7c9; border: 1px solid #2a3a4d;
+    border-radius: 8px; padding: 7px 12px; font: 12px system-ui, sans-serif;
+    cursor: pointer;
+  }
+  #controls button.active { background: #1d3a2f; color: #7ef0c8; border-color: #2f6b52; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #7ef0c8; font: 15px system-ui, sans-serif; background: #0d1117;
+    transition: opacity .4s; z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">Loading model…</div>
+<div id="hud">
+  <b>Neon Cow</b> · livestock iconography<br/>
+  <span class="keys">drag — orbit · right-drag — pan · scroll — zoom · double-click — reset</span>
+</div>
+<div id="controls">
+  <button id="walk" class="active">Walk</button>
+  <button id="spin">Auto-rotate</button>
+  <button id="wire" class="active">Wireframe</button>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const container = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 2.0;
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+keyLight.position.set(3, 5, 4);
+scene.add(keyLight);
+scene.add(new THREE.AmbientLight(0x334455, 0.8));
+
+// neon ground grid for walk reference
+const grid = new THREE.GridHelper(6, 24, 0x22333f, 0x18222c);
+grid.position.y = 0;
+scene.add(grid);
+
+let model = null;
+const parts = {}; // named nodes: body / head / leg_FL / leg_FR / leg_BL / leg_BR
+
+const loader = new GLTFLoader();
+loader.load(
+  './neon-cow.glb',
+  (gltf) => {
+    model = gltf.scene;
+    model.traverse((o) => { if (o.name) parts[o.name] = o; });
+
+    // center + fit camera
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
+    model.position.sub(center);
+    model.position.y += radius * 0.02; // hooves ~on the grid
+
+    const dist = radius / Math.tan((camera.fov * Math.PI) / 360) * 1.6;
+    camera.position.set(dist * 0.55, dist * 0.35, dist * 0.75);
+    camera.near = radius / 100;
+    camera.far = radius * 100;
+    camera.updateProjectionMatrix();
+    controls.target.set(0, 0, 0);
+    controls.minDistance = radius * 0.6;
+    controls.maxDistance = radius * 8;
+    controls.update();
+
+    scene.add(model);
+    window.__model = model; // debug/verification handle
+    window.__cam = camera;
+    window.__controls = controls;
+    const el = document.getElementById('loading');
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 450);
+  },
+  undefined,
+  (err) => {
+    document.getElementById('loading').textContent = 'Failed to load model: ' + err;
+  }
+);
+
+let walking = false;
+{ const b = document.getElementById('walk'); b.classList.remove('active'); }
+document.getElementById('walk').addEventListener('click', (e) => {
+  walking = !walking;
+  e.target.classList.toggle('active', walking);
+});
+document.getElementById('spin').addEventListener('click', (e) => {
+  controls.autoRotate = !controls.autoRotate;
+  e.target.classList.toggle('active', controls.autoRotate);
+});
+document.getElementById('wire').addEventListener('click', (e) => {
+  const on = e.target.classList.toggle('active');
+  if (!model) return;
+  model.traverse((o) => {
+    if ((o.isMesh || o.isLine) && o.material && o.material.name === 'red_wire') o.visible = on;
+  });
+});
+
+renderer.domElement.addEventListener('dblclick', () => {
+  if (!model) return;
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
+  const dist = radius / Math.tan((camera.fov * Math.PI) / 360) * 1.6;
+  camera.position.set(dist * 0.55, dist * 0.35, dist * 0.75);
+  controls.target.set(0, 0, 0);
+  controls.update();
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---- walk cycle ----
+// Diagonal gait: front-left + back-right together, front-right + back-left
+// opposite. Legs pivot at their joint nodes (built pointing down from origin).
+const clock = new THREE.Clock();
+let walkT = 0;
+const LEG_SWING = 0.5;   // radians
+const WALK_SPEED = 4.2;  // gait tempo
+
+function animateWalk(dt) {
+  if (!model) return;
+  if (walking) walkT += dt * WALK_SPEED;
+  const s = Math.sin(walkT);
+  const c = Math.sin(walkT + Math.PI);
+  if (parts.leg_FL) parts.leg_FL.rotation.z = LEG_SWING * s;
+  if (parts.leg_BR) parts.leg_BR.rotation.z = LEG_SWING * s * 0.9;
+  if (parts.leg_FR) parts.leg_FR.rotation.z = LEG_SWING * c;
+  if (parts.leg_BL) parts.leg_BL.rotation.z = LEG_SWING * c * 0.9;
+  // gentle body bob (two bobs per stride) and head nod
+  if (parts.body) parts.body.position.y = 0.025 * Math.sin(walkT * 2);
+  if (parts.head) parts.head.rotation.z = 0.07 * Math.sin(walkT * 2 + 1.2);
+}
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  animateWalk(dt);
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
