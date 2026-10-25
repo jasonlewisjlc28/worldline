@@ -194,13 +194,34 @@ const loadCroplandGrid = () => {
   if (croplandGridCache) return Promise.resolve(croplandGridCache);
   if (!croplandGridPromise) {
     croplandGridPromise = fetch("/data/cropland.bin")
-      .then((r) => r.arrayBuffer())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Cropland grid: ${r.status}`);
+        return r.arrayBuffer();
+      })
       .then((b) => {
         croplandGridCache = new Uint8Array(b);
         return croplandGridCache;
       });
   }
   return croplandGridPromise;
+};
+
+let pastureGridCache: Uint8Array | null = null;
+let pastureGridPromise: Promise<Uint8Array> | null = null;
+const loadPastureGrid = () => {
+  if (pastureGridCache) return Promise.resolve(pastureGridCache);
+  if (!pastureGridPromise) {
+    pastureGridPromise = fetch("/data/pasture.bin")
+      .then((r) => {
+        if (!r.ok) throw new Error(`Pasture grid: ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((b) => {
+        pastureGridCache = new Uint8Array(b);
+        return pastureGridCache;
+      });
+  }
+  return pastureGridPromise;
 };
 
 // The cornfield GLB ships PBR materials, but the scene is unlit (flat
@@ -213,8 +234,8 @@ const loadCornfield = () => {
   if (!cornfieldPromise) {
     cornfieldPromise = new GLTFLoader()
       .loadAsync("/preview/neon-corn-lowpoly.glb")
-      .then((g) => {
-        g.scene.traverse((o) => {
+      .then((g: any) => {
+        g.scene.traverse((o: any) => {
           // Hide the plane outline boxes (same as the preview's "Planes off"):
           // the red drawings on the cards stay visible. NOTE: wire_cards is a
           // LINES primitive, which GLTFLoader builds as THREE.Line — not a
@@ -223,7 +244,7 @@ const loadCornfield = () => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
           const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          const conv = mats.map((m) => {
+          const conv = mats.map((m: any) => {
             const src = m as THREE.MeshStandardMaterial;
             const emissive =
               src.emissive && (src.emissive.r > 0.01 || src.emissive.g > 0.01 || src.emissive.b > 0.01)
@@ -257,6 +278,8 @@ type CornGrowItem = {
   basePos: THREE.Vector3;
   up: THREE.Vector3;
   scale: number;
+  heightScale: number;
+  widthScale: number;
   height: number;
   delay: number; // ms after t0
   dur: number; // ms
@@ -266,12 +289,16 @@ type CornGrowItem = {
 const CORN_GROW_STAGGER = 1.1; // s, sweep window across the country's latitude
 const CORN_GROW_DUR = 0.55; // s per stalk
 
-type CroplandRegion = {
+type AgriculturalKind = "crop" | "pasture";
+type AgriculturalCell = { key: number; lng: number; lat: number; pct: number };
+type AgriculturalRegion = {
+  kind: AgriculturalKind;
   lng: number;
   lat: number;
   radiusDeg: number;
-  cells: number;
-  pts: { lng: number; lat: number }[]; // actual cropland cell centers
+  cells: AgriculturalCell[];
+  cellSet: Set<number>;
+  pts: { lng: number; lat: number }[]; // dominant land-use cell centers
 };
 
 // Deterministic RNG so a country's scatter layout survives re-renders.
@@ -291,9 +318,55 @@ const hashName = (s: string) => {
   return h >>> 0;
 };
 
-// Find contiguous cropland regions inside a country: threshold the grid,
-// keep cells inside the country polygon, then 8-connected-component cluster.
-const croplandRegions = (f: CountryFeature, grid: Uint8Array): CroplandRegion[] => {
+// Each six-vertex card is one leaf. Give a small set of shared stalk variants
+// subtle differences in node height, leaf size, azimuth, and pitch. Geometry is
+// shared within each variant, so the field stays cheap to render.
+const makeCornGrowthVariant = (proto: THREE.Group, rng: () => number) => {
+  const variant = proto.clone(true);
+  variant.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || o.name !== "cards") return;
+    const geometry = mesh.geometry.clone();
+    const positions = geometry.getAttribute("position") as THREE.BufferAttribute;
+    const base = new THREE.Vector3();
+    const point = new THREE.Vector3();
+    for (let first = 0; first + 5 < positions.count; first += 6) {
+      base.set(
+        (positions.getX(first) + positions.getX(first + 1)) * 0.5,
+        (positions.getY(first) + positions.getY(first + 1)) * 0.5,
+        (positions.getZ(first) + positions.getZ(first + 1)) * 0.5
+      );
+      const radial = new THREE.Vector3(base.x, 0, base.z);
+      if (radial.lengthSq() < 1e-8) radial.set(1, 0, 0);
+      radial.normalize();
+      const tangent = new THREE.Vector3(-radial.z, 0, radial.x);
+      const leafSize = 0.94 + rng() * 0.12;
+      const transform = new THREE.Matrix4()
+        .makeTranslation(base.x, base.y + (rng() - 0.5) * 0.036, base.z)
+        .multiply(new THREE.Matrix4().makeRotationY((rng() - 0.5) * 0.24))
+        .multiply(new THREE.Matrix4().makeRotationAxis(tangent, (rng() - 0.5) * 0.16))
+        .multiply(new THREE.Matrix4().makeScale(leafSize, leafSize, leafSize))
+        .multiply(new THREE.Matrix4().makeTranslation(-base.x, -base.y, -base.z));
+      for (let i = first; i < first + 6; i++) {
+        point.fromBufferAttribute(positions, i).applyMatrix4(transform);
+        positions.setXYZ(i, point.x, point.y, point.z);
+      }
+    }
+    positions.needsUpdate = true;
+    geometry.computeBoundingSphere();
+    mesh.geometry = geometry;
+  });
+  return variant;
+};
+
+// Find contiguous crop- and pasture-dominant regions inside a country. Each
+// 0.25° cell has exactly one land-use owner, so the two overlays never compete
+// and corn can be restricted to the same crop-dominant geometry.
+const agriculturalRegions = (
+  f: CountryFeature,
+  cropGrid: Uint8Array,
+  pastureGrid: Uint8Array
+): AgriculturalRegion[] => {
   let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
   const visitRing = (ring: [number, number][]) => {
     for (const [lng, lat] of ring) {
@@ -312,57 +385,69 @@ const croplandRegions = (f: CountryFeature, grid: Uint8Array): CroplandRegion[] 
   const i0 = Math.max(0, Math.floor((90 - maxLat) / GRID_CELL));
   const i1 = Math.min(GRID_H - 1, Math.floor((90 - minLat) / GRID_CELL));
 
-  const inside = new Set<number>();
+  const owners = new Map<number, AgriculturalKind>();
   for (let i = i0; i <= i1; i++) {
     const lat = 90 - (i + 0.5) * GRID_CELL;
     for (let j = j0; j <= j1; j++) {
-      if (grid[i * GRID_W + j] < CROPLAND_MIN_PCT) continue;
+      const key = i * GRID_W + j;
+      const crop = cropGrid[key];
+      const pasture = pastureGrid[key];
+      if (Math.max(crop, pasture) < CROPLAND_MIN_PCT) continue;
       const lng = -180 + (j + 0.5) * GRID_CELL;
-      if (geoContains(f as never, [lng, lat])) inside.add(i * GRID_W + j);
+      if (geoContains(f as never, [lng, lat])) {
+        // Ties favor crops, preserving the previous cornfield behavior.
+        owners.set(key, crop >= pasture ? "crop" : "pasture");
+      }
     }
   }
-  if (inside.size === 0) return [];
+  if (owners.size === 0) return [];
 
-  // 8-connected components
-  const clusters: { key: number; lng: number; lat: number; pct: number }[][] = [];
+  // 8-connected components, separated at crop/pasture boundaries.
+  const clusters: { kind: AgriculturalKind; cells: AgriculturalCell[] }[] = [];
   const seen = new Set<number>();
-  for (const start of inside) {
+  for (const [start, startKind] of owners) {
     if (seen.has(start)) continue;
-    const comp: { key: number; lng: number; lat: number; pct: number }[] = [];
+    const comp: AgriculturalCell[] = [];
     const stack = [start];
     seen.add(start);
     while (stack.length) {
       const key = stack.pop()!;
+      const kind = owners.get(key)!;
       const i = Math.floor(key / GRID_W);
       const j = key % GRID_W;
       const lng = -180 + (j + 0.5) * GRID_CELL;
       const lat = 90 - (i + 0.5) * GRID_CELL;
-      comp.push({ key, lng, lat, pct: grid[key] });
+      comp.push({
+        key,
+        lng,
+        lat,
+        pct: kind === "crop" ? cropGrid[key] : pastureGrid[key],
+      });
       for (let di = -1; di <= 1; di++) {
         for (let dj = -1; dj <= 1; dj++) {
           if (!di && !dj) continue;
           const ni = i + di, nj = j + dj;
           if (ni < 0 || ni >= GRID_H || nj < 0 || nj >= GRID_W) continue;
           const nk = ni * GRID_W + nj;
-          if (inside.has(nk) && !seen.has(nk)) {
+          if (owners.get(nk) === startKind && !seen.has(nk)) {
             seen.add(nk);
             stack.push(nk);
           }
         }
       }
     }
-    clusters.push(comp);
+    clusters.push({ kind: startKind, cells: comp });
   }
 
-  // rank by total cropland weight, keep the dominant regions
+  // Rank by real land-use weight and retain the country's dominant regions.
   clusters.sort((a, b) => {
-    const sa = a.reduce((s, c) => s + c.pct, 0);
-    const sb = b.reduce((s, c) => s + c.pct, 0);
+    const sa = a.cells.reduce((s, c) => s + c.pct, 0);
+    const sb = b.cells.reduce((s, c) => s + c.pct, 0);
     return sb - sa;
   });
-  const out: CroplandRegion[] = [];
-  for (const comp of clusters) {
-    if (out.length >= 5) break;
+  const out: AgriculturalRegion[] = [];
+  for (const { kind, cells: comp } of clusters) {
+    if (out.length >= 12) break;
     const total = comp.reduce((s, c) => s + c.pct, 0);
     if (total < 30) continue; // ignore specks
     let lng = 0, lat = 0;
@@ -372,18 +457,144 @@ const croplandRegions = (f: CountryFeature, grid: Uint8Array): CroplandRegion[] 
     }
     lng /= total;
     lat /= total;
-    let radius = 0.7; // minimum so small regions still read
+    let radius = 0.7;
     for (const c of comp) radius = Math.max(radius, geoDistance([c.lng, c.lat], [lng, lat]) / DEG);
-    radius += 0.18; // half cell diagonal padding
+    radius += 0.18;
     out.push({
+      kind,
       lng,
       lat,
       radiusDeg: radius,
-      cells: comp.length,
+      cells: comp,
+      cellSet: new Set(comp.map((c) => c.key)),
       pts: comp.map((c) => ({ lng: c.lng, lat: c.lat })),
     });
   }
   return out;
+};
+
+const AGRICULTURE_COLORS: Record<AgriculturalKind, string> = {
+  crop: "#1f9d55",
+  pasture: "#e53935",
+};
+
+// One surface-hugging mesh per land-use type. The hatch is procedural and in
+// geographic units, so its spacing is consistent between countries without a
+// texture swimming across the globe or changing density between regions.
+const makeAgricultureSurface = (regions: AgriculturalRegion[], kind: AgriculturalKind) => {
+  const positions: number[] = [];
+  const geoCoords: number[] = [];
+  const indices: number[] = [];
+  const borderPositions: number[] = [];
+  const radius = SURFACE + (kind === "pasture" ? 0.00105 : 0.00085);
+  const borderRadius = SURFACE + (kind === "pasture" ? 0.00135 : 0.00115);
+  const half = GRID_CELL * 0.5;
+  const steps = 2;
+
+  for (const reg of regions) {
+    if (reg.kind !== kind) continue;
+    for (const cell of reg.cells) {
+      const base = positions.length / 3;
+      for (let y = 0; y <= steps; y++) {
+        const lat = cell.lat - half + (GRID_CELL * y) / steps;
+        for (let x = 0; x <= steps; x++) {
+          const lng = cell.lng - half + (GRID_CELL * x) / steps;
+          const v = toVec3(lng, lat, radius);
+          positions.push(v.x, v.y, v.z);
+          geoCoords.push(lng, lat);
+        }
+      }
+      for (let y = 0; y < steps; y++) {
+        for (let x = 0; x < steps; x++) {
+          const a = base + y * (steps + 1) + x;
+          const b = a + 1;
+          const c = a + steps + 1;
+          const d = c + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+
+      // Only exterior component edges become outlines; shared cell edges do
+      // not produce a dark grid over the hatch.
+      const i = Math.floor(cell.key / GRID_W);
+      const j = cell.key % GRID_W;
+      const edges = [
+        { neighbor: (i - 1) * GRID_W + j, a: [cell.lng - half, cell.lat + half], b: [cell.lng + half, cell.lat + half] },
+        { neighbor: (i + 1) * GRID_W + j, a: [cell.lng - half, cell.lat - half], b: [cell.lng + half, cell.lat - half] },
+        { neighbor: i * GRID_W + j - 1, a: [cell.lng - half, cell.lat - half], b: [cell.lng - half, cell.lat + half] },
+        { neighbor: i * GRID_W + j + 1, a: [cell.lng + half, cell.lat - half], b: [cell.lng + half, cell.lat + half] },
+      ];
+      for (const edge of edges) {
+        if (reg.cellSet.has(edge.neighbor)) continue;
+        const a = toVec3(edge.a[0], edge.a[1], borderRadius);
+        const b = toVec3(edge.b[0], edge.b[1], borderRadius);
+        borderPositions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+    }
+  }
+
+  const group = new THREE.Group();
+  if (indices.length) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("aGeo", new THREE.Float32BufferAttribute(geoCoords, 2));
+    geometry.setIndex(indices);
+    geometry.computeBoundingSphere();
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(AGRICULTURE_COLORS[kind]) },
+        uOpacity: { value: 0.88 },
+      },
+      vertexShader: `
+        attribute vec2 aGeo;
+        varying vec2 vGeo;
+        void main() {
+          vGeo = aGeo;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying vec2 vGeo;
+        void main() {
+          float lat = vGeo.y * 0.01745329252;
+          vec2 p = vec2(vGeo.x * cos(lat), vGeo.y);
+          float diagonal = (p.x - p.y) * 8.0;
+          float along = (p.x + p.y) * 6.0;
+          float distToLine = abs(fract(diagonal) - 0.5);
+          float lineAA = max(fwidth(diagonal) * 0.65, 0.002);
+          float stroke = 1.0 - smoothstep(0.09 - lineAA, 0.09 + lineAA, distToLine);
+          float dashAA = max(fwidth(along) * 0.65, 0.002);
+          float dash = smoothstep(0.36 - dashAA, 0.36 + dashAA, fract(along));
+          float alpha = stroke * dash * uOpacity;
+          if (alpha < 0.015) discard;
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = kind === "pasture" ? 4 : 3;
+    group.add(mesh);
+  }
+  if (borderPositions.length) {
+    const border = new THREE.LineSegments(
+      new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(borderPositions, 3)),
+      new THREE.LineBasicMaterial({
+        color: AGRICULTURE_COLORS[kind],
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      })
+    );
+    border.renderOrder = kind === "pasture" ? 6 : 5;
+    group.add(border);
+  }
+  return group;
 };
 
 // Evenly spread subset of the region's real cropland cells: farthest-point
@@ -759,11 +970,14 @@ export default function WorldMap({
           }
           it.obj.visible = true;
           const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
-          // uniform scale about the base: the plant emerges from the ground
-          // at full proportions (squashing only Y would flatten the leaf
-          // cards onto the surface as a dark streak)
+          // Grow about the base at each plant's own slight proportions. The
+          // country scale remains the baseline for every stalk in the field.
           const g = Math.max(0.02, e);
-          it.obj.scale.set(it.scale * g, it.scale * g, it.scale * g);
+          it.obj.scale.set(
+            it.scale * it.widthScale * g,
+            it.scale * it.heightScale * g,
+            it.scale * it.widthScale * g
+          );
           it.obj.position.copy(it.basePos).addScaledVector(it.up, -(1 - e) * it.height * 0.35);
           const flick = p < 0.8 ? 0.7 + 0.3 * Math.abs(Math.sin(p * 22 + it.seed)) : 1;
           for (const rec of it.mats) rec.m.opacity = rec.target * p * flick;
@@ -1123,27 +1337,45 @@ export default function WorldMap({
     const token = ++croplandToken.current;
     let cancelled = false;
     (async () => {
-      const [grid, proto] = await Promise.all([loadCroplandGrid(), loadCornfield()]);
+      const [cropGrid, pastureGrid, proto] = await Promise.all([
+        loadCroplandGrid(),
+        loadPastureGrid(),
+        loadCornfield(),
+      ]);
       if (cancelled || croplandToken.current !== token) return;
-      const regions = croplandRegions(f, grid);
+      const regions = agriculturalRegions(f, cropGrid, pastureGrid);
       croplandCountRef.current = regions.length;
       if (regions.length === 0) return;
       const [clng, clat] = geoCentroid(f as never);
       const countryRadiusDeg = angularRadius(f, [clng, clat]) / DEG;
       const group = new THREE.Group();
-      // One stalk size per country: small nations get small stalks, but every
-      // stalk inside a country shares the same scale. Larger regions are
-      // shown with MORE stalks, never bigger ones.
+      // Surface hatching stays just above the land and below all agricultural
+      // models. The two land-use classes occupy mutually exclusive cells.
+      group.add(makeAgricultureSurface(regions, "crop"));
+      group.add(makeAgricultureSurface(regions, "pasture"));
+      // Country size remains the baseline stalk scale; larger regions are shown
+      // with MORE stalks, never bigger ones. Small deterministic variations keep
+      // individual plants from looking cloned without changing that hierarchy.
       const stalkScale = Math.min(
         0.03,
         Math.max(0.004, countryRadiusDeg * DEG * R * 0.18)
       );
-      const stalkH = 2.0 * stalkScale; // GLB stalk is ~2 units tall
+      const baseStalkH = 2.0 * stalkScale; // GLB stalk is ~2 units tall
+      const growthRng = mulberry32(hashName(`${f.properties.name}:corn-growth`));
+      const growthVariants = Array.from({ length: 12 }, () => makeCornGrowthVariant(proto, growthRng));
       const rng = mulberry32(hashName(f.properties.name));
-      const placed: { inst: THREE.Object3D; pos: THREE.Vector3; up: THREE.Vector3; lat: number }[] = [];
+      const placed: {
+        inst: THREE.Object3D;
+        pos: THREE.Vector3;
+        up: THREE.Vector3;
+        lat: number;
+        heightScale: number;
+        widthScale: number;
+      }[] = [];
       for (const reg of regions) {
+        if (reg.kind !== "crop") continue; // pasture-dominant cells never grow corn
         const rWorld = reg.radiusDeg * DEG * R;
-        const ground = stalkH * 0.85;
+        const ground = baseStalkH * 0.85;
         // density target from region area; slight overlap allowed, capped both
         // for perf and by how many real cropland cells the region has
         const nTarget = Math.max(
@@ -1152,7 +1384,10 @@ export default function WorldMap({
         );
         const chosen = sampleCells(reg.pts, Math.min(nTarget, reg.pts.length), rng);
         for (const cell of chosen) {
-          const inst = proto.clone(true);
+          const inst = growthVariants[Math.floor(rng() * growthVariants.length)].clone(true);
+          const heightScale = 0.94 + rng() * 0.12;
+          const widthScale = 0.97 + rng() * 0.06;
+          const stalkH = baseStalkH * heightScale;
           const pos = toVec3(cell.lng, cell.lat, R * 1.004);
           const up = pos.clone().normalize();
           const north = new THREE.Vector3(0, 1, 0).addScaledVector(up, -up.y);
@@ -1163,11 +1398,11 @@ export default function WorldMap({
           inst.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, up, zed));
           inst.rotateY(rng() * Math.PI * 2); // random lean direction
           // holographic load-in starts as a tiny stalk at the ground, sunk;
-          // the render loop grows it uniformly from its base on its stagger
-          inst.scale.setScalar(stalkScale * 0.02);
+          // the render loop grows it from its base on its stagger
+          inst.scale.set(stalkScale * widthScale * 0.02, stalkScale * heightScale * 0.02, stalkScale * widthScale * 0.02);
           inst.position.copy(pos).addScaledVector(up, -stalkH * 0.35);
           group.add(inst);
-          placed.push({ inst, pos, up, lat: cell.lat });
+          placed.push({ inst, pos, up, lat: cell.lat, heightScale, widthScale });
         }
       }
       // Stagger south-first so the field sweeps onto the map bottom-up.
@@ -1182,12 +1417,12 @@ export default function WorldMap({
         // per-stalk material clones so the fade can be staggered without
         // touching the shared cached proto materials
         const mats: CornGrowItem["mats"] = [];
-        p.inst.traverse((o) => {
+        p.inst.traverse((o: any) => {
           if (o.name === "wire_cards") return; // outline boxes stay hidden
           const mo = o as THREE.Mesh;
           if (!mo.material) return;
           const list = Array.isArray(mo.material) ? mo.material : [mo.material];
-          const cloned = list.map((m0) => {
+          const cloned = list.map((m0: any) => {
             const m = m0.clone();
             mats.push({ m, target: m.opacity, transparent0: m.transparent });
             m.transparent = true;
@@ -1201,7 +1436,9 @@ export default function WorldMap({
           basePos: p.pos.clone(),
           up: p.up.clone(),
           scale: stalkScale,
-          height: stalkH,
+          heightScale: p.heightScale,
+          widthScale: p.widthScale,
+          height: baseStalkH * p.heightScale,
           delay: ((latMax - p.lat) / latSpan) * CORN_GROW_STAGGER * 1000 + rng() * 180,
           dur: CORN_GROW_DUR * 1000,
           seed: rng() * 10,

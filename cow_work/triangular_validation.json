@@ -1,0 +1,10 @@
+{
+  "bytes": 774556,
+  "vertices": 7246,
+  "triangles": 3522,
+  "unweighted_vertices": 0,
+  "duration_seconds": 24,
+  "loop_matrix_max_abs_error": 4.470348358154297e-07,
+  "loop_pixel_max_difference": 22,
+  "loop_pixel_mean_difference": 0.00019583333333333334
+}

@@ -1,0 +1,11 @@
+{
+  "glb": "/mnt/agents/output/Red_Holographic_Cow_Seamless_V4_Clean_Surface.glb",
+  "bytes": 2411588,
+  "mesh_count": 1,
+  "vertex_count": 31185,
+  "unweighted_vertices": 0,
+  "animation_duration_seconds": 24,
+  "loop_matrix_max_abs_error": 4.470348358154297e-07,
+  "loop_pixel_max_difference": 1,
+  "loop_pixel_mean_difference": 9.635416666666667e-05
+}

@@ -282,15 +282,24 @@ export default function ResourcesTab({ countryName, onShowMines, onShowCropland 
                 <Donut data={r.foodOutput} />
               </div>
               <Source>Approximate share of agricultural output value — FAOSTAT / national statistics (latest available).</Source>
-              <p className="mt-2 rounded-md border border-[#e3c4c4] bg-white p-2.5 text-[11px] leading-relaxed text-stone-700">
-                <Wheat size={12} className="mr-1 inline text-[#b91c1c]" />
-                The neon cornstalks mark this country's cropland on the globe —
-                each stalk stands on an actual cropland grid cell from a global
-                agricultural map, clustered into the country's growing regions.
-              </p>
+              <div className="mt-2 rounded-md border border-[#e3c4c4] bg-white p-2.5 text-[11px] leading-relaxed text-stone-700">
+                <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1.5 font-semibold">
+                  <span className="inline-flex items-center gap-1.5 text-[#b52f2f]">
+                    <span className="h-3.5 w-5 border border-[#e53935] bg-[repeating-linear-gradient(45deg,transparent_0_3px,#e53935_3px_4px,transparent_4px_7px)]" />
+                    Pasture
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-green-700">
+                    <span className="h-3.5 w-5 border border-[#1f9d55] bg-[repeating-linear-gradient(45deg,transparent_0_3px,#1f9d55_3px_4px,transparent_4px_7px)]" />
+                    Crop land
+                  </span>
+                </div>
+                Hatched regions show the dominant agricultural land use in each
+                grid cell. Cornstalks appear only in crop-dominant areas; red
+                pasture regions contain no crop overlay or cornstalks.
+              </div>
               <Source>
-                Cropland regions: Mehrabi et al., "Global agricultural lands in
-                the year 2015" (ESSD 2025, CC-BY 4.0), resampled to 0.25°.
+                Cropland and pasture: Mehrabi et al., "Global agricultural lands
+                in the year 2015" (ESSD 2025, CC-BY 4.0), resampled to 0.25°.
               </Source>
             </Card>
           ) : (
