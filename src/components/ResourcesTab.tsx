@@ -294,8 +294,9 @@ export default function ResourcesTab({ countryName, onShowMines, onShowCropland 
                   </span>
                 </div>
                 Hatched regions show the dominant agricultural land use in each
-                grid cell. Cornstalks appear only in crop-dominant areas; red
-                pasture regions contain no crop overlay or cornstalks.
+                grid cell. Cornstalks appear only in crop-dominant areas. Larger
+                continuous pasture regions contain independently grazing and
+                wandering cows; small or narrow fragments remain hatch-only.
               </div>
               <Source>
                 Cropland and pasture: Mehrabi et al., "Global agricultural lands

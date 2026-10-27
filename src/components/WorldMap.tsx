@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { createLivestockSystem, type LivestockSystem } from "./pastureLivestock";
 import earcut from "earcut";
 import { geoCentroid, geoContains, geoDistance } from "d3-geo";
 import { feature } from "topojson-client";
@@ -722,6 +723,7 @@ export default function WorldMap({
   const croplandToken = useRef(0);
   const croplandCountRef = useRef(0);
   const cornGrowRef = useRef<{ items: CornGrowItem[]; t0: number } | null>(null);
+  const livestockRef = useRef<LivestockSystem | null>(null);
 
   useEffect(() => {
     fetch("/countries-110m.json")
@@ -991,6 +993,7 @@ export default function WorldMap({
         }
         if (settled === cg.items.length) cornGrowRef.current = null;
       }
+      livestockRef.current?.update(t, camera, camRef.current.dist);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(loop);
     };
@@ -1013,6 +1016,8 @@ export default function WorldMap({
       personSpritesRef.current.clear();
       pulsesRef.current = [];
       cornGrowRef.current = null;
+      livestockRef.current?.dispose();
+      livestockRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1330,6 +1335,8 @@ export default function WorldMap({
       croplandGroupRef.current = null;
     }
     cornGrowRef.current = null;
+    livestockRef.current?.dispose();
+    livestockRef.current = null;
     croplandCountRef.current = 0;
     if (!cropland) return;
     const f = countryByName.get(cropland);
@@ -1353,6 +1360,12 @@ export default function WorldMap({
       // models. The two land-use classes occupy mutually exclusive cells.
       group.add(makeAgricultureSurface(regions, "crop"));
       group.add(makeAgricultureSurface(regions, "pasture"));
+      const livestockPromise = createLivestockSystem({
+        regions,
+        rng: mulberry32(hashName(`${f.properties.name}:pasture-livestock`)),
+        toVec3,
+        surface: SURFACE + 0.003,
+      });
       // Country size remains the baseline stalk scale; larger regions are shown
       // with MORE stalks, never bigger ones. Small deterministic variations keep
       // individual plants from looking cloned without changing that hierarchy.
@@ -1445,6 +1458,13 @@ export default function WorldMap({
           mats,
         };
       });
+      const livestock = await livestockPromise;
+      if (cancelled || croplandToken.current !== token) {
+        livestock.dispose();
+        return;
+      }
+      group.add(livestock.group);
+      livestockRef.current = livestock;
       scene.add(group);
       croplandGroupRef.current = group;
       cornGrowRef.current = { items, t0: performance.now() };
@@ -1500,9 +1520,90 @@ export default function WorldMap({
       getGlobeK: () => camRef.current.dist,
       getTilt: () => camRef.current.el / DEG,
       getSelected: () => selectedCountry ?? null,
+      focusAt: (lng: number, lat: number, dist = 0.2) => {
+        tweenToken.current++;
+        zoomToken.current++;
+        zoomAnim.current = null;
+        flyDistTarget.current = null;
+        const point = toVec3(lng, lat, R);
+        focusRef.current.copy(point);
+        camRef.current = { az: azOf(point), el: elOf(point), dist };
+      },
       getCountryCount: () => countryMeshesRef.current.length,
       getCropland: () => croplandCountRef.current,
+      getLivestock: () => ({
+        count: livestockRef.current?.cows.length ?? 0,
+        visible: livestockRef.current?.cows.filter((c) => c.obj.visible).length ?? 0,
+        cows: livestockRef.current?.cows.map((c) => ({
+          state: c.state,
+          stateElapsed: c.stateElapsed,
+          stateDuration: c.stateDuration,
+          routeDistance: c.routeDistance,
+          routeLength: c.route?.length ?? 0,
+          speed: c.speed,
+          walkRate: c.walkRate,
+          gaitGroundSpeed: c.gaitGroundSpeed,
+          modelHeightOffset: c.model.position.y,
+          bodyOffset: c.bodyOffset.toArray(),
+          stridePerCycle: c.gaitGroundSpeed * 2 / c.modelScale,
+          modelScale: c.modelScale,
+          walkPhase: ((c.walkAction.time % 2) + 2) % 2,
+          phaseProgress: c.hologram.progress,
+          phaseDelay: c.hologram.delay,
+          phaseDuration: c.hologram.duration,
+          feet: c.feet.map((foot) => ({
+            name: foot.name,
+            planted: foot.planted,
+            released: foot.released,
+            lockWeight: foot.lockWeight,
+            lockError: foot.lockError,
+            naturalUpperLength: foot.naturalUpperLength,
+            naturalLowerLength: foot.naturalLowerLength,
+            upperLength: foot.upperLength,
+            lowerLength: foot.lowerLength,
+            reachRatio: foot.reachRatio,
+            upperAngle: foot.upperAngle,
+            lowerAngle: foot.lowerAngle,
+            hoofAngle: foot.hoofAngle,
+            hoofNormalError: foot.hoofNormalError,
+            anchor: foot.anchor.toArray(),
+            position: foot.hoof.getWorldPosition(new THREE.Vector3()).toArray(),
+          })),
+          walkWeight: c.walkWeight,
+          targetWalkWeight: c.targetWalkWeight,
+          blendStartWeight: c.blendStartWeight,
+          blendElapsed: c.blendElapsed,
+          blendDuration: c.blendDuration,
+          frameDt: c.lastFrameDt,
+          grazeTime: c.grazeAction.time,
+          walkTime: c.walkAction.time,
+          grazeTimeScale: c.grazeAction.timeScale,
+          walkTimeScale: c.walkAction.timeScale,
+          heading: c.heading,
+          blockedTime: c.blockedTime,
+          yieldAfter: c.yieldAfter,
+          visible: c.obj.visible,
+          lng: c.lng,
+          lat: c.lat,
+          cellKey: c.cellKey,
+          patch: c.patch.id,
+          patchCells: c.patch.cells.length,
+          patchAreaKm2: Math.round(c.patch.areaKm2),
+          scaleFactor: c.patch.scaleFactor,
+          routeEndCell: c.route?.endCell ?? null,
+          position: c.obj.position.toArray(),
+        })) ?? [],
+      }),
       getScene: () => sceneRef.current,
+      setLivestockPlaybackRate: (rate: number) => {
+        const safeRate = THREE.MathUtils.clamp(rate, 0.1, 4);
+        for (const cow of livestockRef.current?.cows ?? []) {
+          cow.grazeAction.setEffectiveTimeScale(safeRate);
+          cow.walkRate = safeRate;
+          cow.speed = cow.gaitGroundSpeed * safeRate;
+          cow.walkAction.setEffectiveTimeScale(safeRate * cow.walkWeight);
+        }
+      },
       setLayerVisible: (layer: string, visible: boolean) => {
         const groups: Record<string, (THREE.Object3D | null)[]> = {
           sphere: sceneRef.current ? [sceneRef.current.children[0]] : [],
